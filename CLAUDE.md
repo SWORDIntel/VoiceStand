@@ -163,6 +163,93 @@ This system has Intel Meteor Lake with hidden AVX-512 support on P-cores. Enable
 - License: MIT
 - Contributors: Welcome! See CONTRIBUTING.md
 
+## Specialized Agent Usage Guide
+
+### When to Use Specialized Agents
+This project benefits from multiple specialized agents available in Claude Code. Use agents for complex, multi-step tasks:
+
+#### **c-internal Agent**
+- **When**: C/C++ development, performance optimization, hardware-specific features
+- **Use Cases**: 
+  - AVX-512 optimization for Intel P-cores
+  - Memory pool optimizations
+  - Lock-free queue implementations
+  - SIMD audio processing
+  - Template metaprogramming
+- **Example**: "Use c-internal agent to optimize the MFCC computation with AVX-512"
+
+#### **DEBUGGER Agent**
+- **When**: Crashes, memory leaks, performance issues, audio glitches
+- **Use Cases**:
+  - PulseAudio connection failures
+  - Whisper.cpp integration issues
+  - Memory corruption in audio buffers
+  - Thread synchronization problems
+- **Example**: "Use DEBUGGER to analyze segfault in audio_capture.cpp:218"
+
+#### **TESTBED Agent**
+- **When**: Setting up testing infrastructure, creating test suites
+- **Use Cases**:
+  - Add Catch2 or Google Test framework
+  - Create unit tests for core components
+  - Performance benchmarking suite
+  - Audio processing validation tests
+- **Example**: "Use TESTBED to create comprehensive test suite for Phase 1-3 features"
+
+#### **Optimizer Agent**
+- **When**: Performance bottlenecks, latency optimization, throughput improvements
+- **Use Cases**:
+  - Audio pipeline latency reduction (<10ms target)
+  - Memory allocation optimization
+  - Whisper.cpp inference speed
+  - GUI responsiveness improvements
+- **Example**: "Use Optimizer to reduce audio processing latency below 10ms"
+
+#### **Security Agent**
+- **When**: Input validation, sandboxing, vulnerability assessment
+- **Use Cases**:
+  - Audio input validation
+  - Configuration file parsing security
+  - Hotkey injection prevention
+  - Model file integrity checks
+- **Example**: "Use Security agent to audit audio input handling for buffer overflows"
+
+#### **INFRASTRUCTURE Agent**
+- **When**: Build system, CI/CD, deployment automation
+- **Use Cases**:
+  - GitHub Actions CI/CD pipeline
+  - Docker containerization
+  - Package management (deb/rpm)
+  - Cross-compilation setup
+- **Example**: "Use INFRASTRUCTURE to set up GitHub Actions for automated builds"
+
+#### **DOCGEN Agent**
+- **When**: API documentation, user guides, technical documentation
+- **Use Cases**:
+  - Doxygen API documentation
+  - User manual for VoiceStand
+  - Developer contribution guide
+  - Architecture documentation
+- **Example**: "Use DOCGEN to create comprehensive API documentation"
+
+### Multi-Agent Workflows
+For complex tasks, coordinate multiple agents:
+
+1. **Performance Optimization**: 
+   - Optimizer → c-internal → TESTBED → DEBUGGER
+2. **Feature Development**: 
+   - architect → c-internal → TESTBED → DOCGEN
+3. **Production Deployment**: 
+   - Security → INFRASTRUCTURE → TESTBED → Monitor
+
+### Agent Selection Rules
+- **Single file edits**: Use basic tools (Edit, MultiEdit)
+- **Complex algorithms**: Use c-internal agent
+- **Build/deployment**: Use INFRASTRUCTURE agent  
+- **Testing needs**: Use TESTBED agent
+- **Performance issues**: Use Optimizer + DEBUGGER agents
+- **Documentation**: Use DOCGEN agent
+
 ## Quick Tips for Claude
 - Always check existing code style before modifications
 - Run build after changes: `cd build && make`
@@ -171,3 +258,5 @@ This system has Intel Meteor Lake with hidden AVX-512 support on P-cores. Enable
 - Use lock-free primitives for thread communication
 - Prefer stack allocation with memory pools
 - Target <10ms latency for real-time processing
+- **Use specialized agents proactively** for complex tasks
+- Coordinate multiple agents for comprehensive solutions
