@@ -1,0 +1,63 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# Model files (large binaries)
+models/*.bin
+models/*.gguf
+models/*.ggml
+
+# Compiled binaries
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Dependencies (will use submodules)
+third_party/whisper.cpp/build/
+
+# Generated files
+compile_commands.json
+
+# Temporary files
+*.tmp
+*.log
+*.cache
+
+# Python cache
+__pycache__/
+*.pyc
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Settings that might contain sensitive data
+settings.json
+config.json
+*.key
+*.pem
+
+# Audio test files
+*.wav
+*.mp3
+*.m4a
+*.flac
+
+# Session data
+sessions/
+transcripts/
+auto_corrections.json
+context_model.json
+phase3_models/
