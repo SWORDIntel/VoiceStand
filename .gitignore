@@ -4,9 +4,10 @@ cmake-build-*/
 out/
 
 # Model files (large binaries)
-models/*.bin
-models/*.gguf
-models/*.ggml
+models/
+*.bin
+*.gguf
+*.ggml
 
 # Compiled binaries
 *.o
