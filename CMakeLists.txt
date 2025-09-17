@@ -23,6 +23,7 @@ add_executable(voice-to-text
     src/main.cpp
     src/core/audio_capture.cpp
     src/core/whisper_processor.cpp
+    src/core/personal_voice_commands.cpp
     src/gui/main_window.cpp
     src/integration/hotkey_manager.cpp
 )
@@ -185,6 +186,48 @@ target_link_directories(test_integrated PRIVATE
 )
 
 target_link_libraries(test_integrated PRIVATE
+    ${GTK4_LIBRARIES}
+    ${PULSE_LIBRARIES}
+    ${X11_LIBRARIES}
+    Xtst
+    ${CMAKE_THREAD_LIBS_INIT}
+    jsoncpp_lib
+    whisper
+    ggml
+    m
+    stdc++fs
+)
+
+# Phase 2 Personal Commands Test Executable
+add_executable(test_personal_commands
+    src/test/test_phase2_personal_commands.cpp
+    src/core/personal_voice_commands.cpp
+    src/core/audio_capture.cpp
+    src/core/enhanced_whisper_processor.cpp
+    src/core/settings_manager.cpp
+)
+
+target_include_directories(test_personal_commands PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${GTK4_INCLUDE_DIRS}
+    ${PULSE_INCLUDE_DIRS}
+    ${X11_INCLUDE_DIR}
+    ${WHISPER_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/ggml/include
+)
+
+target_compile_options(test_personal_commands PRIVATE
+    ${GTK4_CFLAGS_OTHER}
+    ${PULSE_CFLAGS_OTHER}
+    -Wall -Wextra -O2 -march=native -mavx2
+)
+
+target_link_directories(test_personal_commands PRIVATE
+    ${WHISPER_LIB_DIR}/src
+    ${WHISPER_LIB_DIR}/ggml/src
+)
+
+target_link_libraries(test_personal_commands PRIVATE
     ${GTK4_LIBRARIES}
     ${PULSE_LIBRARIES}
     ${X11_LIBRARIES}

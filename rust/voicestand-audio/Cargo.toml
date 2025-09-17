@@ -1,0 +1,25 @@
+[package]
+name = "voicestand-audio"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+voicestand-core = { path = "../voicestand-core" }
+
+cpal.workspace = true
+hound.workspace = true
+dasp.workspace = true
+dasp_sample.workspace = true
+dasp_signal.workspace = true
+dasp_interpolate.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+parking_lot.workspace = true
+serde.workspace = true

@@ -1,0 +1,70 @@
+[workspace]
+members = [
+    "voicestand-core",
+    # Skip problematic crates for now
+    # "voicestand-audio",
+    # "voicestand-speech",
+    # "voicestand-gui",
+    "voicestand",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["VoiceStand Team"]
+license = "MIT"
+repository = "https://github.com/SWORDIntel/VoiceStand"
+rust-version = "1.70"
+
+[workspace.dependencies]
+# Core dependencies
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# ML/Speech recognition
+candle-core = "0.3"
+candle-nn = "0.3"
+candle-transformers = "0.3"
+
+# Async/concurrency
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+
+# System integration
+directories = "5.0"
+
+# Audio dependencies
+cpal = "0.15"
+hound = "3.5"
+dasp = { version = "0.11", features = ["signal", "interpolate"] }
+dasp_sample = "0.11"
+dasp_signal = "0.11"
+dasp_interpolate = { version = "0.11", features = ["linear"] }
+
+# GUI dependencies
+gtk4 = { version = "0.8", package = "gtk4" }
+glib = "0.19"
+cairo-rs = { version = "0.19", features = ["png"] }
+pango = "0.19"
+
+# Additional dependencies
+regex = "1.10"
+base64 = "0.22"
+global-hotkey = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true

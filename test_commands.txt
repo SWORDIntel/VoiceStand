@@ -1,0 +1,9 @@
+open browser
+take screenshot
+volume up
+lock screen
+minimize window
+copy
+paste
+open terminal
+quit

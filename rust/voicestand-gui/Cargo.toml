@@ -1,0 +1,23 @@
+[package]
+name = "voicestand-gui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+voicestand-core = { path = "../voicestand-core" }
+voicestand-audio = { path = "../voicestand-audio" }
+voicestand-speech = { path = "../voicestand-speech" }
+
+gtk4.workspace = true
+glib.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
