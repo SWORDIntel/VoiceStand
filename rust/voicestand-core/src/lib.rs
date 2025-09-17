@@ -2,11 +2,13 @@ pub mod config;
 pub mod error;
 pub mod types;
 pub mod events;
+pub mod performance;
 
 pub use config::*;
 pub use error::*;
 pub use types::*;
 pub use events::*;
+pub use performance::*;
 
 use std::sync::Arc;
 use parking_lot::RwLock;

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "voicestand-core",
+    "voicestand-intel",
     # Skip problematic crates for now
     # "voicestand-audio",
     # "voicestand-speech",
