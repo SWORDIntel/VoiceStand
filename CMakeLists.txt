@@ -79,6 +79,54 @@ add_custom_target(download-models
     COMMENT "Downloading Whisper base model..."
 )
 
+# GNA Voice Detector test executable
+add_executable(gna_power_test
+    src/core/gna_power_test.cpp
+    src/core/gna_voice_detector.cpp
+)
+
+# Check for OpenVINO installation
+find_path(OPENVINO_INCLUDE_DIR
+    NAMES openvino/openvino.hpp
+    PATHS
+        /home/john/openvino/runtime/include
+        /opt/openvino/runtime/include
+        /usr/local/include
+        /usr/include
+)
+
+find_library(OPENVINO_LIBRARIES
+    NAMES openvino
+    PATHS
+        /home/john/openvino/runtime/lib
+        /opt/openvino/runtime/lib
+        /usr/local/lib
+        /usr/lib
+)
+
+if(OPENVINO_INCLUDE_DIR AND OPENVINO_LIBRARIES)
+    message(STATUS "OpenVINO found - enabling GNA support")
+    target_compile_definitions(gna_power_test PRIVATE ENABLE_OPENVINO)
+    target_include_directories(gna_power_test PRIVATE ${OPENVINO_INCLUDE_DIR})
+    target_link_libraries(gna_power_test PRIVATE ${OPENVINO_LIBRARIES})
+else()
+    message(STATUS "OpenVINO not found - using software fallback")
+endif()
+
+target_include_directories(gna_power_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_compile_options(gna_power_test PRIVATE
+    -Wall -Wextra -O2 -march=native
+)
+
+target_link_libraries(gna_power_test PRIVATE
+    ${CMAKE_THREAD_LIBS_INIT}
+    m
+    stdc++fs
+)
+
 # Test executable for integrated system
 add_executable(test_integrated
     src/test/test_integrated_system.cpp

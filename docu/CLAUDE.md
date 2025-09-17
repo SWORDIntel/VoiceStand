@@ -187,39 +187,83 @@ VoiceStand/
 └── build/                                # Build artifacts
 ```
 
-### Next Actions - Phase 1 Implementation
+## 🎯 FOCUSED ROADMAP: Personal Push-to-Talk Excellence
 
-#### **Week 1: GNA Hardware Integration (CURRENT)**
-1. **Configure GNA Device Access**
+**Updated Focus**: Personal productivity system (enterprise features are stretch goals)
+
+### **3-Phase Personal Implementation**
+
+#### **Phase 1: Core Foundation (Weeks 1-3) - CURRENT**
+**Target**: Basic personal push-to-talk system
+- Week 1: GNA hardware integration for personal use
+- Week 2: NPU personal transcription
+- Week 3: Personal system service and hotkey integration
+
+#### **Phase 2: Personal Features (Weeks 4-6)**
+**Target**: Enhanced personal productivity
+- Week 4: Personal voice commands (20+ commands)
+- Week 5: Personal learning and vocabulary adaptation
+- Week 6: Application context intelligence
+
+#### **Phase 3: Advanced Personal Optimization (Weeks 7-9)**
+**Target**: Maximum personal productivity
+- Week 7: Hardware performance optimization for individual use
+- Week 8: Advanced personal intelligence and predictions
+- Week 9: Personal workflow automation and templates
+
+### **Personal Use Success Metrics**
+| Metric | Target | Personal Benefit |
+|--------|--------|------------------|
+| **Response Time** | <5ms | Instant personal productivity |
+| **Accuracy** | >95% | Personal speech recognition |
+| **Power Usage** | <0.05W | Laptop battery efficiency |
+| **Setup Time** | <10 min | Personal installation |
+| **Learning Curve** | <30 min | Individual onboarding |
+
+### **Personal Applications**
+- **Coding**: Voice input while programming
+- **Writing**: Document dictation and editing
+- **Terminal**: Voice commands in command line
+- **Web**: Form filling and search
+- **Notes**: Quick voice note-taking
+
+### **Next Actions - Phase 1 Implementation**
+
+#### **Week 1: Personal GNA Integration (CURRENT)**
+1. **Configure GNA for Personal Use**
    ```bash
+   # Personal device access (no enterprise setup)
    sudo usermod -a -G render $USER
-   # Test GNA device accessibility
+   # Test personal GNA functionality
    ```
 
-2. **Power Baseline Measurement**
+2. **Personal Power Optimization**
    ```bash
-   sudo intel-gpu-top -s 1000  # NPU/GNA monitoring
-   sudo powerstat 1 60         # System power measurement
+   # Optimize for laptop battery life
+   sudo intel-gpu-top -s 1000  # Monitor personal power usage
+   # Target: <0.05W for personal always-on detection
    ```
 
-3. **Basic GNA Audio Pipeline**
+3. **Personal Voice Detection**
    ```bash
-   # Start with simple VAD implementation
+   # Personal wake word training
    cd src/core
-   # Begin gna_voice_detector.cpp development
+   # Implement gna_voice_detector.cpp for individual use
    ```
 
-#### **Success Metrics for Phase 1**
-- [ ] **GNA VAD Active**: Continuous voice detection at <0.05W
-- [ ] **Wake Detection**: 95% accuracy for predefined patterns
-- [ ] **Latency Target**: <50ms from voice trigger to NPU activation
-- [ ] **Power Efficiency**: <0.03W idle consumption verified
+#### **Success Criteria for Personal Phase 1**
+- [ ] **Personal GNA VAD**: Continuous detection optimized for individual use
+- [ ] **Personal Wake Words**: 95% accuracy for personal patterns
+- [ ] **Personal Response**: <50ms for individual productivity
+- [ ] **Laptop Optimized**: <0.05W power for extended battery life
 
-### Strategic Vision
+### **Strategic Vision - Personal Focus**
 
-**Immediate Goal**: Universal push-to-talk system leveraging unique Intel GNA hardware
-**Market Position**: First-to-market advantage with hardware-specific optimization
-**Long-term Vision**: Definitive Linux voice input solution with breakthrough efficiency
+**Immediate Goal**: Personal push-to-talk system for individual productivity
+**Personal Benefit**: Hands-free computing for enhanced workflow efficiency
+**Long-term Vision**: Intelligent personal voice assistant optimized for individual use
+
+**Note**: Enterprise features (fleet management, centralized policies) removed from core roadmap - focus on personal excellence.
 
 ### Risk Assessment
 

@@ -1,9 +1,0 @@
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/voice-to-text.dir
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/download-models.dir
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/test_integrated.dir
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/edit_cache.dir
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/rebuild_cache.dir
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/list_install_components.dir
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/install.dir
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/install/local.dir
-/home/ubuntu/Documents/claude-portable/standalone-vtt-system/build/CMakeFiles/install/strip.dir
