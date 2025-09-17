@@ -79,6 +79,14 @@ add_custom_target(download-models
     COMMENT "Downloading Whisper base model..."
 )
 
+# Personal GNA Integration - Week 1 Components
+add_executable(personal_gna_week1_demo
+    src/integration/personal_gna_week1_demo.cpp
+    src/core/gna_device_manager.cpp
+    src/core/gna_voice_detector.cpp
+    src/test/personal_gna_integration_test.cpp
+)
+
 # GNA Voice Detector test executable
 add_executable(gna_power_test
     src/core/gna_power_test.cpp
@@ -106,6 +114,10 @@ find_library(OPENVINO_LIBRARIES
 
 if(OPENVINO_INCLUDE_DIR AND OPENVINO_LIBRARIES)
     message(STATUS "OpenVINO found - enabling GNA support")
+    target_compile_definitions(personal_gna_week1_demo PRIVATE ENABLE_OPENVINO)
+    target_include_directories(personal_gna_week1_demo PRIVATE ${OPENVINO_INCLUDE_DIR})
+    target_link_libraries(personal_gna_week1_demo PRIVATE ${OPENVINO_LIBRARIES})
+
     target_compile_definitions(gna_power_test PRIVATE ENABLE_OPENVINO)
     target_include_directories(gna_power_test PRIVATE ${OPENVINO_INCLUDE_DIR})
     target_link_libraries(gna_power_test PRIVATE ${OPENVINO_LIBRARIES})
@@ -113,6 +125,22 @@ else()
     message(STATUS "OpenVINO not found - using software fallback")
 endif()
 
+# Personal GNA Week 1 Demo configuration
+target_include_directories(personal_gna_week1_demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_compile_options(personal_gna_week1_demo PRIVATE
+    -Wall -Wextra -O2 -march=native -mavx2
+)
+
+target_link_libraries(personal_gna_week1_demo PRIVATE
+    ${CMAKE_THREAD_LIBS_INIT}
+    m
+    stdc++fs
+)
+
+# GNA Power Test configuration
 target_include_directories(gna_power_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )

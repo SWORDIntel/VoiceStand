@@ -1,257 +1,169 @@
 #pragma once
 
-#include <atomic>
-#include <memory>
-#include <string>
+#include "gna_device_manager.h"
 #include <vector>
-#include <functional>
+#include <string>
+#include <memory>
+#include <atomic>
 #include <chrono>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <map>
-#include <cmath>
-#include <limits>
-
-// OpenVINO includes for GNA backend
-#ifdef ENABLE_OPENVINO
-#include <openvino/openvino.hpp>
-#endif
-
-namespace vtt {
 
 /**
- * @brief GNA Voice Detector - Ultra-low power voice activity detection
+ * Personal GNA-Accelerated Voice Detector for Dell Latitude 5450
+ * Week 1 Implementation: Personal wake word detection and VAD
  *
- * Implements always-on voice detection using Intel GNA (Gaussian Neural Accelerator)
- * for continuous operation at <0.05W power consumption with >90% accuracy.
- *
- * Features:
- * - Hardware-accelerated VAD on Intel GNA
- * - Wake word detection with DTW template matching
- * - Power-optimized audio preprocessing
- * - 50ms response time to NPU handoff
- * - Thermal-aware operation
+ * Focus: Personal speech patterns, battery efficiency, 90%+ accuracy
  */
 
-struct GNAConfig {
-    // Audio parameters
-    uint32_t sample_rate = 16000;           // 16kHz audio input
-    uint32_t frame_size = 320;              // 20ms frames (320 samples @ 16kHz)
-    uint32_t hop_size = 160;                // 10ms hop (50% overlap)
-
-    // VAD parameters
-    float vad_threshold = 0.35f;            // Voice activity threshold
-    float energy_threshold = 0.01f;         // Minimum energy threshold
-    uint32_t min_speech_frames = 3;         // Minimum frames for speech detection
-    uint32_t max_silence_frames = 10;       // Max silence before speech end
-
-    // Wake word parameters
-    std::vector<std::string> wake_words = {"voicestand", "hey voice"};
-    float wake_word_threshold = 0.8f;       // Wake word confidence threshold
-    uint32_t wake_word_timeout_ms = 5000;   // Wake word validity timeout
-
-    // Power management
-    float max_power_watts = 0.05f;          // Maximum GNA power consumption
-    uint32_t thermal_throttle_temp = 75;    // Thermal throttling temperature (°C)
-    bool enable_power_gating = true;        // Enable aggressive power gating
-
-    // GNA device configuration
-    std::string gna_device = "/dev/accel/accel0";
-    std::string gna_model_path = "models/gna_vad.xml";
-    uint32_t gna_precision = 16;            // 16-bit fixed point precision
-};
-
-struct GNADetectionResult {
-    bool voice_detected = false;            // Voice activity detected
-    bool wake_word_detected = false;        // Wake word detected
-    float confidence = 0.0f;                // Detection confidence [0.0-1.0]
-    std::string wake_word = "";             // Detected wake word (if any)
-    uint64_t timestamp_us = 0;              // Detection timestamp (microseconds)
-    float power_consumption_mw = 0.0f;      // Current power consumption (milliwatts)
-    uint32_t temperature_celsius = 0;       // GNA temperature
-};
-
-struct AudioFeatures {
-    std::vector<float> mfcc;                // 13 MFCC coefficients
-    std::vector<float> energy;              // Frame energy
-    std::vector<float> spectral_centroid;   // Spectral features
-    float zcr = 0.0f;                       // Zero crossing rate
-    float spectral_rolloff = 0.0f;          // Spectral rolloff point
-};
-
-using GNADetectionCallback = std::function<void(const GNADetectionResult&)>;
-using GNAPowerCallback = std::function<void(float power_mw, uint32_t temp_c)>;
-
-/**
- * @brief Power-optimized feature extractor for GNA processing
- */
-class GNAFeatureExtractor {
-public:
-    explicit GNAFeatureExtractor(const GNAConfig& config);
-
-    // Extract features optimized for GNA inference
-    AudioFeatures extract_features(const float* samples, size_t num_samples);
-
-    // Pre-emphasis filter for speech enhancement
-    void apply_preemphasis(float* samples, size_t num_samples, float alpha = 0.97f);
-
-    // Efficient windowing with power optimization
-    void apply_hamming_window(float* samples, size_t num_samples);
-
-    // Fast MFCC computation optimized for GNA
-    std::vector<float> compute_mfcc(const float* samples, size_t num_samples);
-
-private:
-    GNAConfig config_;
-    std::vector<float> hamming_window_;
-    std::vector<float> mel_filterbank_;
-    std::vector<float> dct_matrix_;
-
-    // Pre-computed tables for efficiency
-    void init_mel_filterbank();
-    void init_dct_matrix();
-};
-
-/**
- * @brief GNA Power Manager - Monitor and optimize power consumption
- */
-class GNAPowerManager {
-public:
-    explicit GNAPowerManager(const GNAConfig& config);
-    ~GNAPowerManager();
-
-    // Start power monitoring
-    bool start_monitoring();
-    void stop_monitoring();
-
-    // Power state management
-    void set_power_gating(bool enabled);
-    void set_thermal_throttling(bool enabled);
-
-    // Power consumption monitoring
-    float get_current_power_mw() const;
-    uint32_t get_temperature_celsius() const;
-    bool is_thermal_throttled() const;
-
-    // Power optimization
-    void optimize_for_idle();
-    void optimize_for_detection();
-    void emergency_power_reduction();
-
-    void set_power_callback(GNAPowerCallback callback);
-
-private:
-    GNAConfig config_;
-    std::atomic<bool> monitoring_active_;
-    std::atomic<float> current_power_mw_;
-    std::atomic<uint32_t> current_temp_c_;
-    std::atomic<bool> thermal_throttled_;
-
-    std::thread monitoring_thread_;
-    GNAPowerCallback power_callback_;
-    mutable std::mutex callback_mutex_;
-
-    void monitoring_loop();
-    void read_power_consumption();
-    void read_temperature();
-    void apply_thermal_throttling();
-};
-
-/**
- * @brief Main GNA Voice Detector class
- */
 class GNAVoiceDetector {
 public:
-    explicit GNAVoiceDetector(const GNAConfig& config = {});
+    struct PersonalVoiceConfig {
+        // Personal wake word settings
+        std::vector<std::string> personal_wake_words = {"computer", "assistant", "wake"};
+        float wake_word_threshold = 0.85f;  // Personal accuracy target
+        bool adaptive_threshold = true;
+
+        // Personal VAD settings
+        float vad_threshold = 0.65f;        // Personal voice activity threshold
+        int min_speech_duration_ms = 300;   // Personal minimum speech length
+        int max_silence_duration_ms = 1000; // Personal silence timeout
+
+        // Personal audio processing
+        int sample_rate = 16000;            // Standard for personal use
+        int frame_size_ms = 30;             // Personal frame size
+        int hop_length_ms = 10;             // Personal hop length
+
+        // Personal GNA optimization
+        bool use_gna_acceleration = true;   // Enable GNA for personal efficiency
+        int gna_context_window = 512;       // Personal context size
+        float power_efficiency_mode = 0.8f; // Personal power vs performance balance
+    };
+
+    struct PersonalDetectionResult {
+        bool wake_word_detected = false;
+        std::string detected_word;
+        float confidence = 0.0f;
+        std::chrono::steady_clock::time_point timestamp;
+
+        // Personal VAD results
+        bool voice_activity = false;
+        float voice_probability = 0.0f;
+        int speech_duration_ms = 0;
+
+        // Personal performance metrics
+        float processing_time_ms = 0.0f;
+        float power_consumption_mw = 0.0f;
+        bool gna_used = false;
+    };
+
+    struct PersonalAudioFeatures {
+        std::vector<float> mfcc_features;     // Personal MFCC for wake words
+        std::vector<float> energy_features;   // Personal energy analysis
+        std::vector<float> spectral_features; // Personal spectral characteristics
+        float zero_crossing_rate = 0.0f;      // Personal ZCR for VAD
+        float spectral_centroid = 0.0f;       // Personal spectral analysis
+    };
+
+    // Constructor for personal voice detection
+    GNAVoiceDetector(std::shared_ptr<GNADeviceManager> gna_manager);
+    GNAVoiceDetector(std::shared_ptr<GNADeviceManager> gna_manager,
+                     const PersonalVoiceConfig& config);
     ~GNAVoiceDetector();
 
-    // Lifecycle management
-    bool initialize();
-    bool start_detection();
-    void stop_detection();
+    // Core personal voice detection
+    bool initializePersonalDetection();
+    PersonalDetectionResult detectPersonalVoice(const std::vector<float>& audio_data);
+    bool trainPersonalWakeWords(const std::vector<std::string>& wake_words);
     void shutdown();
 
-    // Audio input processing
-    bool process_audio(const float* samples, size_t num_samples);
+    // Personal VAD operations
+    bool detectVoiceActivity(const std::vector<float>& audio_frame);
+    float calculateVoiceProbability(const PersonalAudioFeatures& features);
+    bool isPersonalSpeechActive() const;
 
-    // Callback registration
-    void set_detection_callback(GNADetectionCallback callback);
-    void set_power_callback(GNAPowerCallback callback);
+    // Personal wake word detection
+    bool detectWakeWord(const std::vector<float>& audio_data, std::string& detected_word, float& confidence);
+    void updatePersonalWakeWordThreshold(float threshold);
+    bool addPersonalWakeWord(const std::string& wake_word);
 
-    // Status and control
-    bool is_running() const { return detection_active_; }
-    GNADetectionResult get_last_result() const;
+    // Personal feature extraction (GNA-accelerated)
+    PersonalAudioFeatures extractPersonalFeatures(const std::vector<float>& audio_data);
+    std::vector<float> computePersonalMFCC(const std::vector<float>& audio_data);
+    std::vector<float> computePersonalSpectralFeatures(const std::vector<float>& audio_data);
 
-    // Wake word management
-    bool add_wake_word(const std::string& word, const std::vector<float>& template_features);
-    bool remove_wake_word(const std::string& word);
-    void clear_wake_words();
+    // Personal performance monitoring
+    float getPersonalDetectionAccuracy() const;
+    float getPersonalPowerEfficiency() const;
+    void logPersonalPerformanceMetrics() const;
 
-    // Power optimization
-    void set_power_mode(const std::string& mode); // "ultra_low", "balanced", "performance"
-    float get_power_consumption_mw() const;
-
-    // Model management
-    bool load_gna_model(const std::string& model_path);
-    bool is_model_loaded() const { return model_loaded_; }
+    // Personal configuration updates
+    void updatePersonalVoiceProfile();
+    void adjustPersonalSensitivity(float sensitivity);
+    bool validatePersonalConfiguration() const;
 
 private:
-    GNAConfig config_;
-    std::atomic<bool> initialized_;
-    std::atomic<bool> detection_active_;
-    std::atomic<bool> model_loaded_;
+    std::shared_ptr<GNADeviceManager> gna_manager_;
+    PersonalVoiceConfig config_;
 
-    // OpenVINO GNA components
-#ifdef ENABLE_OPENVINO
-    std::unique_ptr<ov::Core> ov_core_;
-    std::unique_ptr<ov::CompiledModel> compiled_model_;
-    std::unique_ptr<ov::InferRequest> infer_request_;
-#endif
+    // Personal detection state
+    std::atomic<bool> initialized_{false};
+    std::atomic<bool> detecting_{false};
+    std::atomic<bool> voice_active_{false};
 
-    // Feature extraction and power management
-    std::unique_ptr<GNAFeatureExtractor> feature_extractor_;
-    std::unique_ptr<GNAPowerManager> power_manager_;
+    // Personal wake word templates (GNA-optimized)
+    std::vector<std::vector<float>> personal_wake_word_templates_;
+    std::vector<std::string> personal_wake_word_labels_;
 
-    // Audio processing buffers
-    std::vector<float> audio_buffer_;
-    std::vector<float> feature_buffer_;
+    // Personal performance tracking
+    mutable std::atomic<uint64_t> total_detections_{0};
+    mutable std::atomic<uint64_t> correct_detections_{0};
+    mutable std::atomic<float> average_power_consumption_{0.0f};
+    mutable std::atomic<float> average_processing_time_{0.0f};
 
-    // Wake word templates
-    std::map<std::string, std::vector<float>> wake_word_templates_;
+    // Personal audio processing buffers
+    std::vector<float> personal_audio_buffer_;
+    std::vector<float> personal_feature_buffer_;
 
-    // Detection state
-    GNADetectionResult last_result_;
-    mutable std::mutex result_mutex_;
+    // Personal GNA acceleration methods
+    bool processWithPersonalGNA(const std::vector<float>& features, std::vector<float>& output);
+    bool loadPersonalModelToGNA();
+    void optimizePersonalGNAPerformance();
 
-    // Callbacks
-    GNADetectionCallback detection_callback_;
-    mutable std::mutex callback_mutex_;
+    // Personal feature computation helpers
+    std::vector<float> computePersonalFFT(const std::vector<float>& audio_data);
+    std::vector<float> applyPersonalMelFilterBank(const std::vector<float>& spectrum);
+    std::vector<float> applyPersonalDCT(const std::vector<float>& mel_spectrum);
 
-    // Processing thread
-    std::thread processing_thread_;
-    std::atomic<bool> processing_active_;
-    std::condition_variable processing_cv_;
-    std::mutex processing_mutex_;
+    // Personal wake word matching
+    float computePersonalSimilarity(const std::vector<float>& features,
+                                   const std::vector<float>& template_features);
+    bool matchPersonalWakeWordTemplate(const std::vector<float>& features,
+                                      std::string& best_match, float& confidence);
 
-    // Internal methods
-    bool initialize_openvino();
-    bool load_model_to_gna();
-    void processing_loop();
+    // Personal VAD helpers
+    float computePersonalEnergyVAD(const std::vector<float>& audio_frame);
+    float computePersonalSpectralVAD(const std::vector<float>& audio_frame);
+    bool applyPersonalVADSmoothing(bool current_vad);
 
-    // VAD and wake word detection
-    bool detect_voice_activity(const AudioFeatures& features);
-    bool detect_wake_word(const AudioFeatures& features, std::string& detected_word);
-    float compute_wake_word_similarity(const std::vector<float>& features,
-                                     const std::vector<float>& template_features);
-
-    // Power optimization methods
-    void optimize_gna_power();
-    void handle_thermal_event();
-
-    // Utility methods
-    uint64_t get_timestamp_us() const;
-    void notify_detection_result(const GNADetectionResult& result);
+    // Personal optimization and monitoring
+    void updatePersonalPerformanceMetrics(const PersonalDetectionResult& result);
+    void adaptPersonalThresholds();
+    std::string getPersonalConfigSummary() const;
 };
 
-} // namespace vtt
+// Personal utility functions for voice detection
+namespace personal_voice_utils {
+    // Personal audio preprocessing
+    std::vector<float> normalizePersonalAudio(const std::vector<float>& audio);
+    std::vector<float> applyPersonalPreemphasis(const std::vector<float>& audio, float alpha = 0.97f);
+    std::vector<float> applyPersonalWindowing(const std::vector<float>& audio);
+
+    // Personal wake word utilities
+    std::vector<std::string> getDefaultPersonalWakeWords();
+    bool validatePersonalWakeWord(const std::string& wake_word);
+    float computePersonalWakeWordQuality(const std::vector<float>& features);
+
+    // Personal performance utilities
+    GNAVoiceDetector::PersonalVoiceConfig getOptimalPersonalVoiceConfig();
+    bool validatePersonalPowerBudget(float target_power_mw);
+    std::string formatPersonalDetectionResults(const GNAVoiceDetector::PersonalDetectionResult& result);
+}
