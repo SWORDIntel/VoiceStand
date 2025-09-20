@@ -383,11 +383,11 @@ impl VoiceStandIntegration {
                 if let Ok(mut audio_events) = pipeline_guard.start().await {
                     while let Some(audio_event) = audio_events.recv().await {
                         match audio_event {
-                            voicestand_audio::PipelineEvent::FrameCaptured { frame, timestamp } => {
+                            voicestand_audio::PipelineEvent::AudioProcessed { samples, stats, vad_result } => {
                                 // CRITICAL FIX: Send audio data to state coordinator for activation detection
                                 if let Some(coordinator_ref) = &state_coordinator {
                                     let coordinator = coordinator_ref.clone();
-                                    let audio_data = frame.samples.clone();
+                                    let audio_data = samples.clone();
 
                                     tokio::spawn(async move {
                                         let mut coord_guard = coordinator.write().await;
@@ -401,14 +401,18 @@ impl VoiceStandIntegration {
                                 }
 
                                 let _ = event_tx.send(IntegrationEvent::AudioCaptured {
-                                    frame_size: frame.samples.len(),
-                                    timestamp,
+                                    frame_size: samples.len(),
+                                    timestamp: std::time::Instant::now(),
                                 }).await;
                             }
-                            voicestand_audio::PipelineEvent::VoiceActivityDetected { confidence } => {
+                            voicestand_audio::PipelineEvent::VoiceDetected { confidence } => {
                                 let _ = event_tx.send(IntegrationEvent::VoiceActivityDetected {
                                     confidence,
                                 }).await;
+                            }
+                            voicestand_audio::PipelineEvent::SilenceDetected => {
+                                // Handle silence detection - could trigger end of voice activity
+                                debug!("Silence detected in audio pipeline");
                             }
                             voicestand_audio::PipelineEvent::Error { error } => {
                                 let _ = event_tx.send(IntegrationEvent::SystemError {

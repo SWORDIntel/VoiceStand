@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux-green.svg)](https://kernel.org)
 
-VoiceStand is a production-ready, memory-safe voice-to-text system built in Rust, featuring Intel Meteor Lake NPU acceleration and always-on GNA wake word detection. Designed for real-time performance with <10ms latency on Dell Latitude 5450 and compatible Intel hardware.
+VoiceStand is a production-ready, memory-safe voice-to-text system built in Rust, featuring Intel Meteor Lake NPU acceleration and always-on GNA wake word detection. Designed for real-time performance with <10ms latency on Intel Meteor Lake systems and compatible hardware.
 
 ## 🚀 Quick Start
 
@@ -110,14 +110,14 @@ voicestand/                  # Main application (366 lines)
 - **Storage**: 2GB for models and cache
 
 ### Recommended Hardware
-- **Platform**: Dell Latitude 5450 (Intel Core Ultra 7 165H)
+- **Platform**: Intel Meteor Lake systems (Intel Core Ultra series)
 - **RAM**: 8GB+ for optimal performance
 - **Audio**: High-quality microphone for best accuracy
 - **Display**: 1080p+ for GUI scaling
 
 ### Supported Platforms
-- ✅ **Dell Latitude 5450** (Primary target)
-- ✅ **Intel Meteor Lake systems** (NPU/GNA required)
+- ✅ **Intel Meteor Lake systems** (Primary target - NPU/GNA required)
+- ✅ **Intel Core Ultra series** (Optimal performance)
 - ⚠️ **Other Intel platforms** (CPU fallback mode)
 - ❌ **AMD/ARM platforms** (Not supported)
 
