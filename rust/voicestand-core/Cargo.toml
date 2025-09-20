@@ -19,6 +19,8 @@ crossbeam-channel.workspace = true
 parking_lot.workspace = true
 num_cpus = "1.16"
 criterion = { version = "0.5", features = ["html_reports"], optional = true }
+voicestand-hardware = { path = "../voicestand-hardware" }
+voicestand-state = { path = "../voicestand-state" }
 
 [dev-dependencies]
 tokio-test = "0.4"

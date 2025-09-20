@@ -179,8 +179,8 @@ impl AudioProcessor {
         })
     }
 
-    /// Calculate RMS energy
-    fn calculate_energy(&self, samples: &[f32]) -> f32 {
+    /// Calculate RMS energy (public method for pipeline integration)
+    pub fn calculate_energy(&self, samples: &[f32]) -> f32 {
         if samples.is_empty() {
             return 0.0;
         }

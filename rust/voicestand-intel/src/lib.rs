@@ -4,6 +4,17 @@ pub mod cpu;
 pub mod simd;
 pub mod hardware_detection;
 pub mod thermal_management;
+pub mod npu_whisper;
+pub mod npu_model_compiler;
+pub mod push_to_talk_manager;
+pub mod npu_integration_tests;
+
+// GNA Wake Word Detection Components
+pub mod gna_wake_word_detector;
+pub mod dual_activation_coordinator;
+pub mod gna_npu_integration;
+pub mod gna_integration_tests;
+pub mod gna_cli;
 
 pub use npu::*;
 pub use gna::*;
@@ -11,6 +22,17 @@ pub use cpu::*;
 pub use simd::*;
 pub use hardware_detection::*;
 pub use thermal_management::*;
+pub use npu_whisper::*;
+pub use npu_model_compiler::*;
+pub use push_to_talk_manager::*;
+pub use npu_integration_tests::*;
+
+// GNA module exports
+pub use gna_wake_word_detector::*;
+pub use dual_activation_coordinator::*;
+pub use gna_npu_integration::*;
+pub use gna_integration_tests::*;
+pub use gna_cli::*;
 
 use voicestand_core::{Result, VoiceStandError};
 use std::sync::Arc;

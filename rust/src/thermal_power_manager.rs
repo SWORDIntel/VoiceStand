@@ -513,7 +513,11 @@ impl ThermalPredictionModel {
                 .map(|m| m.cpu_temp as f32)
                 .collect();
 
-            let temp_trend = recent_temps.first().unwrap() - recent_temps.last().unwrap();
+            let temp_trend = if let (Some(first), Some(last)) = (recent_temps.first(), recent_temps.last()) {
+                first - last
+            } else {
+                0.0
+            };
 
             // Adjust coefficients based on trend
             if temp_trend.abs() > 2.0 {
@@ -536,12 +540,16 @@ impl ThermalPredictionModel {
             };
         }
 
-        let current_temp = thermal_history.back().unwrap().cpu_temp as f32;
+        let current_temp = thermal_history.back().map(|m| m.cpu_temp as f32).unwrap_or(75.0);
 
         // Simple exponential prediction based on recent trend
         let recent_samples = thermal_history.iter().rev().take(5).collect::<Vec<_>>();
         let temp_trend = if recent_samples.len() >= 2 {
-            (recent_samples[0].cpu_temp as f32 - recent_samples.last().unwrap().cpu_temp as f32) / recent_samples.len() as f32
+            if let Some(last) = recent_samples.last() {
+                (recent_samples[0].cpu_temp as f32 - last.cpu_temp as f32) / recent_samples.len() as f32
+            } else {
+                0.0
+            }
         } else {
             0.0
         };

@@ -1,5 +1,6 @@
-use crate::{CircularBuffer, VoiceActivityDetector, VadResult, StreamingBuffer};
-use voicestand_core::{AudioConfig, AudioData, AppEvent, Result, VoiceStandError};
+use crate::{VoiceActivityDetector, VADResult};
+use crate::buffer::StreamingBuffer;
+use voicestand_core::{AudioConfig, AudioData, AudioCaptureConfig, AudioDevice, Result, VoiceStandError};
 
 use cpal::{Device, Stream, StreamConfig, SampleFormat, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};

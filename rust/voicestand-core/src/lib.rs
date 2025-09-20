@@ -3,12 +3,14 @@ pub mod error;
 pub mod types;
 pub mod events;
 pub mod performance;
+pub mod integration;
 
 pub use config::*;
-pub use error::*;
+pub use error::{VoiceStandError, AudioError, Result};
 pub use types::*;
 pub use events::*;
 pub use performance::*;
+pub use integration::*;
 
 use std::sync::Arc;
 use parking_lot::RwLock;

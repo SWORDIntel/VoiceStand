@@ -208,3 +208,89 @@ impl VadState {
         false // No state change
     }
 }
+
+/// Voice command structure for command recognition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceCommand {
+    pub text: String,
+    pub confidence: f32,
+    pub timestamp: SystemTime,
+    pub command_type: CommandType,
+}
+
+/// Command types supported by the system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CommandType {
+    Start,
+    Stop,
+    Pause,
+    Resume,
+    Custom(String),
+}
+
+/// System status information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemStatus {
+    pub is_listening: bool,
+    pub is_processing: bool,
+    pub audio_device_connected: bool,
+    pub model_loaded: bool,
+    pub last_error: Option<String>,
+    pub uptime: Duration,
+}
+
+/// Audio capture device configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioCaptureConfig {
+    pub device_name: Option<String>,
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub frames_per_buffer: u32,
+    pub latency: f32,
+}
+
+impl Default for AudioCaptureConfig {
+    fn default() -> Self {
+        Self {
+            device_name: None,
+            sample_rate: 16_000,
+            channels: 1,
+            frames_per_buffer: 1024,
+            latency: 0.1,
+        }
+    }
+}
+
+/// Audio device information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioDevice {
+    pub name: String,
+    pub index: u32,
+    pub channels: u16,
+    pub sample_rate: u32,
+    pub is_default: bool,
+}
+
+impl AudioDevice {
+    pub fn new(name: String, index: u32, channels: u16, sample_rate: u32, is_default: bool) -> Self {
+        Self {
+            name,
+            index,
+            channels,
+            sample_rate,
+            is_default,
+        }
+    }
+}
+
+/// Audio sample type for type-safe audio processing
+pub type AudioSample = f32;
+
+/// Audio frame for pipeline processing
+#[derive(Debug, Clone)]
+pub struct AudioFrame {
+    pub data: Vec<AudioSample>,
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub timestamp: SystemTime,
+}

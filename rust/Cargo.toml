@@ -2,11 +2,13 @@
 members = [
     "voicestand-core",
     "voicestand-intel",
+    "voicestand-hardware",
+    "voicestand-audio",
+    "voicestand-state",
+    "voicestand",
     # Skip problematic crates for now
-    # "voicestand-audio",
     # "voicestand-speech",
     # "voicestand-gui",
-    "voicestand",
 ]
 resolver = "2"
 

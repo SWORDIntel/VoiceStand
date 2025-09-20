@@ -47,6 +47,43 @@ pub enum VoiceStandError {
         #[from]
         source: tokio::task::JoinError,
     },
+
+    #[error("Hardware not supported: {0}")]
+    HardwareNotSupported(String),
+
+    #[error("Lock poisoned: {0}")]
+    LockPoisoned(String),
+
+    #[error("Intel hardware error: {0}")]
+    IntelHardware(String),
+
+    #[error("NPU error: {0}")]
+    NPU(String),
+
+    #[error("GNA error: {0}")]
+    GNA(String),
+}
+
+/// Audio-specific error types
+#[derive(Error, Debug)]
+pub enum AudioError {
+    #[error("Audio initialization failed: {0}")]
+    InitializationFailed(String),
+
+    #[error("Audio device error: {0}")]
+    DeviceError(String),
+
+    #[error("Audio processing error: {stage}: {reason}")]
+    ProcessingError { stage: String, reason: String },
+
+    #[error("Audio configuration error: {parameter}: {reason}")]
+    ConfigError { parameter: String, reason: String },
+
+    #[error("Audio buffer error: {0}")]
+    BufferError(String),
+
+    #[error("Audio format error: {0}")]
+    FormatError(String),
 }
 
 /// Result type alias for VoiceStand operations
@@ -75,5 +112,25 @@ impl VoiceStandError {
 
     pub fn model_load_failed(msg: impl Into<String>) -> Self {
         Self::ModelLoadFailed(msg.into())
+    }
+
+    pub fn hardware_not_supported(msg: impl Into<String>) -> Self {
+        Self::HardwareNotSupported(msg.into())
+    }
+
+    pub fn lock_poisoned(msg: impl Into<String>) -> Self {
+        Self::LockPoisoned(msg.into())
+    }
+
+    pub fn intel_hardware(msg: impl Into<String>) -> Self {
+        Self::IntelHardware(msg.into())
+    }
+
+    pub fn npu(msg: impl Into<String>) -> Self {
+        Self::NPU(msg.into())
+    }
+
+    pub fn gna(msg: impl Into<String>) -> Self {
+        Self::GNA(msg.into())
     }
 }
