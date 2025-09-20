@@ -253,14 +253,16 @@ MIT License - see [LICENSE](LICENSE) file for complete terms.
 - **Bug Reports**: [GitHub Issues](https://github.com/SWORDIntel/VoiceStand/issues)
 - **Feature Requests**: [GitHub Discussions](https://github.com/SWORDIntel/VoiceStand/discussions)
 - **Security Issues**: Email security@voicestand.dev
-- **Documentation**: See [DEPLOYMENT_COMPLETE.md](DEPLOYMENT_COMPLETE.md)
+- **Documentation**: See [Complete Documentation](docs/)
 
 ## 🎯 Quick Links
 
-- 📖 **[Technical Documentation](DEPLOYMENT_COMPLETE.md)**
-- 🔧 **[Build Instructions](rust/build.sh)**
-- 🧪 **[Validation Script](rust/validate_deployment.sh)**
-- 📊 **[Performance Benchmarks](rust/target/criterion/)**
+- 📚 **[Complete Documentation](docs/)** - Organized documentation index
+- 📖 **[Deployment Guide](docs/deployment/DEPLOYMENT_COMPLETE.md)** - Production deployment
+- 🏗️ **[Architecture Overview](docs/architecture/LEADENGINEER_INTEGRATION_ARCHITECTURE.md)** - System design
+- 🔧 **[Build Instructions](rust/build.sh)** - Build automation
+- 🧪 **[Validation Script](rust/validate_deployment.sh)** - Production validation
+- 📊 **[Performance Analysis](docs/technical/performance_analysis.md)** - Benchmarks and metrics
 
 ---
 
