@@ -61,4 +61,17 @@ sessions/
 transcripts/
 auto_corrections.json
 context_model.json
-phase3_models/
+phase3_models/# Rust build artifacts and large binary files
+rust/target/
+*.rlib
+*.so
+*.a
+*.lib
+*.dll
+*.dylib
+*.exe
+# Debug artifacts
+debug_wake_word
+test_wake_word_validation
+*.core
+core.*
