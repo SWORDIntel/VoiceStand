@@ -4,7 +4,7 @@
 //! Provides RAII resource management and zero-unwrap error handling.
 
 use std::sync::Arc;
-use thiserror::Error;
+// use thiserror::Error; // Unused - reserved for future error handling
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 

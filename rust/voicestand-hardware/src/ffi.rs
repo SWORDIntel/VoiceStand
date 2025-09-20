@@ -5,7 +5,7 @@
 
 /// NPU FFI bindings module
 pub mod npu_bindings {
-    use std::os::raw::{c_char, c_float, c_int, c_uint, c_void};
+    use std::os::raw::{c_char, c_float, c_int, c_uint};
 
     // NPU precision flags
     pub const NPU_PRECISION_FP32: u32 = 0x01;
@@ -118,7 +118,7 @@ pub mod npu_bindings {
 
 /// GNA FFI bindings module
 pub mod gna_bindings {
-    use std::os::raw::{c_char, c_float, c_int, c_uint, c_void};
+    use std::os::raw::{c_char, c_float, c_int, c_uint};
 
     // GNA sample rate flags
     pub const GNA_SAMPLE_RATE_8000: u32 = 0x01;

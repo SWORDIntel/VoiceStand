@@ -61,4 +61,11 @@ impl StateMachine {
         self.transition_count += 1;
         Ok(())
     }
+
+    pub async fn shutdown(&mut self) -> Result<()> {
+        // Reset state machine to initial state
+        self.current_state = VoiceStandState::Idle;
+        self.state_entered = Instant::now();
+        Ok(())
+    }
 }

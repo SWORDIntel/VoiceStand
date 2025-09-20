@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, Semaphore};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
-use crate::error::{HardwareError, HardwareResult, HardwareResultExt};
+use crate::error::{HardwareError, HardwareResult};
 use crate::ffi::gna_bindings;
 use crate::performance::{HardwareMetrics, PerformanceTracker};
 use crate::HardwareResource;
@@ -65,6 +65,40 @@ pub struct GNAHandle {
 
 unsafe impl Send for GNAHandle {}
 unsafe impl Sync for GNAHandle {}
+
+/// Send-safe wrapper for GNA device pointer
+#[derive(Clone, Copy)]
+pub struct SendSafeDevicePtr(*mut gna_bindings::GNADevice);
+
+unsafe impl Send for SendSafeDevicePtr {}
+unsafe impl Sync for SendSafeDevicePtr {}
+
+impl SendSafeDevicePtr {
+    fn new(ptr: *mut gna_bindings::GNADevice) -> Self {
+        Self(ptr)
+    }
+
+    fn as_ptr(&self) -> *mut gna_bindings::GNADevice {
+        self.0
+    }
+}
+
+/// Send-safe wrapper for GNA detection session pointer
+#[derive(Clone, Copy)]
+pub struct SendSafeSessionPtr(*mut gna_bindings::GNADetectionSession);
+
+unsafe impl Send for SendSafeSessionPtr {}
+unsafe impl Sync for SendSafeSessionPtr {}
+
+impl SendSafeSessionPtr {
+    fn new(ptr: *mut gna_bindings::GNADetectionSession) -> Self {
+        Self(ptr)
+    }
+
+    fn as_ptr(&self) -> *mut gna_bindings::GNADetectionSession {
+        self.0
+    }
+}
 
 impl GNAHandle {
     /// Create new GNA handle
@@ -484,15 +518,15 @@ impl WakeWordDetector {
         let (tx, rx) = mpsc::channel(32);
 
         // Start detection loop in background task
-        let device_ptr = self.device_ptr;
-        let session_ptr_copy = session_ptr;
+        let device_ptr_safe = SendSafeDevicePtr::new(self.device_ptr);
+        let session_ptr_safe = SendSafeSessionPtr::new(session_ptr);
         let config = self.config.clone();
         let performance_tracker = Arc::clone(&self.performance_tracker);
 
         tokio::spawn(async move {
             Self::detection_loop(
-                device_ptr,
-                session_ptr_copy,
+                device_ptr_safe,
+                session_ptr_safe,
                 config,
                 performance_tracker,
                 tx,
@@ -608,9 +642,9 @@ impl WakeWordDetector {
     }
 
     async fn detection_loop(
-        device_ptr: *mut gna_bindings::GNADevice,
-        session_ptr: *mut gna_bindings::GNADetectionSession,
-        config: GNAConfig,
+        device_ptr_safe: SendSafeDevicePtr,
+        session_ptr_safe: SendSafeSessionPtr,
+        _config: GNAConfig,
         performance_tracker: Arc<PerformanceTracker>,
         tx: mpsc::Sender<DetectionEvent>,
     ) {
@@ -619,7 +653,7 @@ impl WakeWordDetector {
         loop {
             // Check if session is still valid
             let session_active = unsafe {
-                gna_bindings::gna_detection_session_is_active(session_ptr)
+                gna_bindings::gna_detection_session_is_active(session_ptr_safe.as_ptr())
             };
 
             if !session_active {
@@ -630,7 +664,7 @@ impl WakeWordDetector {
             // Poll for detection results
             let mut result = gna_bindings::GNADetectionResult::default();
             let poll_result = unsafe {
-                gna_bindings::gna_detection_session_poll(session_ptr, &mut result)
+                gna_bindings::gna_detection_session_poll(session_ptr_safe.as_ptr(), &mut result)
             };
 
             if poll_result == 0 && result.detected {
@@ -654,7 +688,7 @@ impl WakeWordDetector {
 
                 // Record performance metrics
                 let power_mw = unsafe {
-                    gna_bindings::gna_device_get_power_consumption(device_ptr)
+                    gna_bindings::gna_device_get_power_consumption(device_ptr_safe.as_ptr())
                 };
 
                 performance_tracker.record_wake_word_detection(

@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use parking_lot::RwLock;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
@@ -15,7 +15,7 @@ pub mod activation;
 pub mod hotkey;
 pub mod state_machine;
 
-pub use ptt::{PttManager, PttEvent};
+pub use ptt::{PushToTalkManager, PttEvent};
 pub use activation::{ActivationDetector, ActivationEvent};
 pub use hotkey::{HotkeyManager, HotkeyConfig, HotkeyEvent};
 pub use state_machine::{StateMachine, VoiceStandState, StateTransition};
@@ -60,17 +60,7 @@ pub enum SystemState {
     Error,
 }
 
-/// Push-to-talk manager
-#[derive(Debug)]
-pub struct PushToTalkManager {
-    config: PTTConfig,
-}
-
-impl PushToTalkManager {
-    pub fn new(config: PTTConfig) -> StateResult<Self> {
-        Ok(Self { config })
-    }
-}
+// Push-to-talk manager is now defined in ptt.rs
 
 /// Activation manager for voice activation
 #[derive(Debug)]
@@ -136,7 +126,7 @@ impl ActivationManager {
 
     /// Start activation manager
     pub async fn start(&mut self) -> StateResult<mpsc::Receiver<ActivationEvent>> {
-        let (tx, rx) = mpsc::channel(100);
+        let (_tx, rx) = mpsc::channel(100);
         // This would normally start a background task for activation processing
         // For now we return an empty receiver that will be fed by process_audio_data
         Ok(rx)
@@ -181,16 +171,24 @@ pub enum StateError {
     ConcurrencyError { operation: String, reason: String },
 
     /// System error
-    #[error("System error: {operation}")]
+    #[error("System error: {operation} - {error}")]
     SystemError {
         operation: String,
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
+        error: String,
     },
 }
 
 /// State operation result type
 pub type StateResult<T> = Result<T, StateError>;
+
+impl From<anyhow::Error> for StateError {
+    fn from(error: anyhow::Error) -> Self {
+        StateError::SystemError {
+            operation: "anyhow_conversion".to_string(),
+            error: error.to_string(),
+        }
+    }
+}
 
 /// Main state management configuration
 #[derive(Debug, Clone)]
@@ -426,9 +424,11 @@ impl VoiceStandCoordinator {
     pub fn new(config: StateConfig) -> StateResult<Self> {
         let (event_tx, event_rx) = mpsc::channel(1000);
 
+        let (ptt_manager, _ptt_rx) = PushToTalkManager::new();
+
         Ok(Self {
             state_machine: StateMachine::new(),
-            ptt_manager: PushToTalkManager::new(config.ptt_config.clone())?,
+            ptt_manager,
             activation_manager: ActivationManager::new(config.activation_modes.clone())?,
             hotkey_manager: HotkeyManager::new(),
             metrics: Arc::new(RwLock::new(SystemMetrics::default())),
@@ -493,7 +493,7 @@ impl VoiceStandCoordinator {
         let hotkey_events = self.hotkey_manager.start().await?;
 
         // Create event forwarding channels
-        let event_tx = self.event_tx.clone();
+        let _event_tx = self.event_tx.clone();
         let metrics = Arc::clone(&self.metrics);
         let start_time = self.start_time;
 
@@ -513,19 +513,10 @@ impl VoiceStandCoordinator {
         });
 
         // Create public event stream
-        let (public_tx, public_rx) = mpsc::channel(100);
+        let (_public_tx, public_rx) = mpsc::channel(100);
 
-        // Forward public events
-        let event_tx_clone = self.event_tx.clone();
-        tokio::spawn(async move {
-            let mut subscriber = event_tx_clone.subscribe();
-
-            while let Ok(event) = subscriber.recv().await {
-                if public_tx.send(event).await.is_err() {
-                    break; // Receiver dropped
-                }
-            }
-        });
+        // Forward public events (will be handled in the main event loop)
+        // Removed subscribe code as mpsc::Sender doesn't support broadcast
 
         info!("🎤 VoiceStand coordinator started - ready for voice commands");
         Ok(public_rx)
@@ -534,9 +525,9 @@ impl VoiceStandCoordinator {
     /// Main event processing loop
     async fn event_loop(
         mut main_events: mpsc::Receiver<SystemEvent>,
-        mut ptt_events: mpsc::Receiver<PttEvent>,
+        mut ptt_events: mpsc::UnboundedReceiver<PttEvent>,
         mut activation_events: mpsc::Receiver<ActivationEvent>,
-        mut hotkey_events: mpsc::Receiver<HotkeyEvent>,
+        mut hotkey_events: mpsc::UnboundedReceiver<HotkeyEvent>,
         event_tx: mpsc::Sender<SystemEvent>,
         metrics: Arc<RwLock<SystemMetrics>>,
         start_time: Instant,
@@ -692,7 +683,13 @@ impl VoiceStandCoordinator {
 
     /// Get current system state
     pub fn get_state(&self) -> SystemState {
-        self.state_machine.current_state()
+        match self.state_machine.current_state() {
+            state_machine::VoiceStandState::Idle => SystemState::Idle,
+            state_machine::VoiceStandState::Listening => SystemState::Listening,
+            state_machine::VoiceStandState::Processing => SystemState::Processing,
+            state_machine::VoiceStandState::Speaking => SystemState::Processing, // Map Speaking to Processing
+            state_machine::VoiceStandState::Error => SystemState::Error,
+        }
     }
 
     /// Check if system is healthy

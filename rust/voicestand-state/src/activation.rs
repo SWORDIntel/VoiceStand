@@ -10,6 +10,7 @@ pub enum ActivationEvent {
     SilenceDetected,
 }
 
+#[derive(Debug)]
 pub struct ActivationDetector {
     threshold: f32,
     min_duration: Duration,

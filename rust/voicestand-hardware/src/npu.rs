@@ -4,12 +4,12 @@
 //! Provides <2ms voice-to-text inference with automatic fallback to CPU.
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use parking_lot::RwLock;
 use tokio::sync::Semaphore;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
-use crate::error::{HardwareError, HardwareResult, HardwareResultExt};
+use crate::error::{HardwareError, HardwareResult};
 use crate::ffi::npu_bindings;
 use crate::performance::{HardwareMetrics, PerformanceTracker};
 use crate::HardwareResource;
