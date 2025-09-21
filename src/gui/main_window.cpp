@@ -21,7 +21,9 @@ MainWindow::MainWindow()
     , settings_button_(nullptr)
     , drawing_area_(nullptr)
     , is_recording_(false)
-    , window_visible_(true) {
+    , window_visible_(true)
+    , security_interface_(nullptr)
+    , security_bridge_(nullptr) {
     instance_ = this;
 }
 
@@ -151,6 +153,17 @@ void MainWindow::show_notification(const std::string& title, const std::string& 
 }
 
 void MainWindow::cleanup() {
+    // Cleanup security interface before destroying app
+    if (security_interface_) {
+        security_interface_->cleanup();
+        security_interface_.reset();
+    }
+
+    if (security_bridge_) {
+        security_bridge_->cleanup();
+        security_bridge_.reset();
+    }
+
     if (app_) {
         g_object_unref(app_);
         app_ = nullptr;
@@ -216,14 +229,21 @@ void MainWindow::create_window() {
     gtk_text_view_set_bottom_margin(GTK_TEXT_VIEW(transcription_view_), 10);
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), transcription_view_);
     
+    // Create status bar with status label
+    GtkWidget* status_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     status_label_ = gtk_label_new("Ready");
     gtk_widget_set_halign(status_label_, GTK_ALIGN_START);
-    gtk_box_append(GTK_BOX(main_box_), status_label_);
-    
+    gtk_widget_set_hexpand(status_label_, TRUE);
+    gtk_box_append(GTK_BOX(status_bar), status_label_);
+    gtk_box_append(GTK_BOX(main_box_), status_bar);
+
+    // Initialize security interface after main UI is created
+    initialize_security_interface();
+
     create_tray_icon();
-    
+
     g_signal_connect(window_, "close-request", G_CALLBACK(on_window_close), this);
-    
+
     gtk_widget_set_visible(window_, TRUE);
 }
 
@@ -507,6 +527,119 @@ void MainWindow::save_settings_from_dialog(GtkWidget* dialog) {
         std::cerr << "[ERROR] Failed to save configuration file\n";
         show_notification("Error", "Failed to save settings");
     }
+}
+
+// Security interface integration methods
+void MainWindow::initialize_security_interface() {
+    try {
+        // Initialize security bridge first
+        security_bridge_ = std::make_unique<SecurityHardwareBridge>();
+        if (!security_bridge_->initialize()) {
+            std::cerr << "Warning: Security bridge initialization failed, running in software-only mode" << std::endl;
+        }
+
+        // Initialize security interface
+        security_interface_ = std::make_unique<SecurityInterface>();
+        if (!security_interface_->initialize(window_)) {
+            std::cerr << "Warning: Security interface initialization failed" << std::endl;
+            return;
+        }
+
+        // Find status bar widget for integration
+        GtkWidget* status_bar = nullptr;
+        GtkWidget* child = gtk_widget_get_first_child(main_box_);
+        while (child) {
+            if (GTK_IS_BOX(child)) {
+                // Check if this is our status bar (last box in main_box_)
+                GtkWidget* next = gtk_widget_get_next_sibling(child);
+                if (!next) {
+                    status_bar = child;
+                    break;
+                }
+            }
+            child = gtk_widget_get_next_sibling(child);
+        }
+
+        // Integrate with main window
+        security_interface_->integrate_with_main_window(main_box_, status_bar);
+
+        // Set up callbacks for hardware detection and metrics
+        security_interface_->set_hardware_detection_callback(
+            [this]() -> HardwareCapabilities {
+                return get_hardware_capabilities();
+            }
+        );
+
+        security_interface_->set_metrics_callback(
+            [this]() -> SecurityMetrics {
+                return get_security_metrics();
+            }
+        );
+
+        security_interface_->set_security_config_callback(
+            [this](const Json::Value& security_config) {
+                // Integrate security config with main config
+                config_["security"] = security_config;
+                if (config_update_callback_) {
+                    config_update_callback_(config_);
+                }
+            }
+        );
+
+        // Initial hardware detection
+        update_security_status();
+
+        std::cout << "Security interface initialized successfully" << std::endl;
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error initializing security interface: " << e.what() << std::endl;
+    }
+}
+
+void MainWindow::update_security_status() {
+    if (!security_bridge_ || !security_interface_) {
+        return;
+    }
+
+    try {
+        // Get current hardware capabilities
+        auto capabilities = security_bridge_->detect_hardware_capabilities();
+        security_interface_->update_hardware_capabilities(capabilities);
+
+        // Log security status change
+        if (security_interface_->is_enterprise_mode()) {
+            AuditLogEntry log_entry;
+            log_entry.timestamp = std::chrono::system_clock::now();
+            log_entry.event_type = "SECURITY_STATUS_UPDATE";
+            log_entry.user_id = std::getenv("USER") ? std::getenv("USER") : "unknown";
+            log_entry.resource = "VoiceStand GUI";
+            log_entry.action = "Hardware Detection";
+            log_entry.result = "SUCCESS";
+            log_entry.details = "Security level: " + security_interface_->get_security_level_string(capabilities.current_level);
+            log_entry.security_level = capabilities.current_level;
+
+            security_interface_->add_audit_log_entry(log_entry);
+        }
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error updating security status: " << e.what() << std::endl;
+    }
+}
+
+HardwareCapabilities MainWindow::get_hardware_capabilities() {
+    if (!security_bridge_) {
+        return HardwareCapabilities{}; // Return default capabilities
+    }
+
+    return security_bridge_->detect_hardware_capabilities();
+}
+
+SecurityMetrics MainWindow::get_security_metrics() {
+    if (!security_bridge_) {
+        return SecurityMetrics{}; // Return default metrics
+    }
+
+    return security_bridge_->get_current_security_metrics();
 }
 
 }
