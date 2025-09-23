@@ -7,8 +7,8 @@
 #include <mutex>
 #include <memory>
 #include <json/json.h>
-#include "security_interface.h"
-#include "security_hardware_bridge.h"
+// #include "security_interface.h"
+// #include "security_hardware_bridge.h"
 
 namespace vtt {
 
@@ -100,14 +100,14 @@ private:
     Json::Value config_;
 
     // Security interface components
-    std::unique_ptr<SecurityInterface> security_interface_;
-    std::unique_ptr<SecurityHardwareBridge> security_bridge_;
+    // std::unique_ptr<SecurityInterface> security_interface_;
+    // std::unique_ptr<SecurityHardwareBridge> security_bridge_;
 
     // Security integration methods
     void initialize_security_interface();
     void update_security_status();
-    HardwareCapabilities get_hardware_capabilities();
-    SecurityMetrics get_security_metrics();
+    // HardwareCapabilities get_hardware_capabilities();
+    // SecurityMetrics get_security_metrics();
 
     static MainWindow* instance_;
 };

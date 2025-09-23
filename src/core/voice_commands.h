@@ -7,6 +7,7 @@
 #include <regex>
 #include <memory>
 #include <chrono>
+#include <iostream>
 
 namespace vtt {
 
@@ -208,7 +209,9 @@ inline std::shared_ptr<VoiceCommands::Command> VoiceCommands::find_command(
 
 inline std::vector<std::string> VoiceCommands::extract_arguments(
     const std::string& text, const std::regex& pattern, const std::smatch& matches) {
-    
+    (void)text;    // Suppress unused parameter warning
+    (void)pattern; // Suppress unused parameter warning
+
     std::vector<std::string> args;
     
     // Skip the first match (full string) and collect capture groups
@@ -313,25 +316,30 @@ inline std::string VoiceCommands::get_help() const {
 
 // Built-in command implementations
 inline void VoiceCommands::handle_help(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << get_help() << std::endl;
 }
 
 inline void VoiceCommands::handle_start_recording(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << "[COMMAND] Starting recording..." << std::endl;
     // Implementation would trigger actual recording
 }
 
 inline void VoiceCommands::handle_stop_recording(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << "[COMMAND] Stopping recording..." << std::endl;
     // Implementation would stop actual recording
 }
 
 inline void VoiceCommands::handle_save_transcript(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << "[COMMAND] Saving transcript..." << std::endl;
     // Implementation would save to file
 }
 
 inline void VoiceCommands::handle_clear_text(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << "[COMMAND] Clearing text..." << std::endl;
     // Implementation would clear transcript buffer
 }
@@ -344,21 +352,25 @@ inline void VoiceCommands::handle_switch_language(const std::vector<std::string>
 }
 
 inline void VoiceCommands::handle_increase_volume(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << "[COMMAND] Increasing volume..." << std::endl;
     // Implementation would adjust audio input gain
 }
 
 inline void VoiceCommands::handle_decrease_volume(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << "[COMMAND] Decreasing volume..." << std::endl;
     // Implementation would adjust audio input gain
 }
 
 inline void VoiceCommands::handle_mute(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << "[COMMAND] Muting microphone..." << std::endl;
     // Implementation would mute audio input
 }
 
 inline void VoiceCommands::handle_settings(const std::vector<std::string>& args) {
+    (void)args; // Suppress unused parameter warning
     std::cout << "[COMMAND] Opening settings..." << std::endl;
     // Implementation would open settings dialog
 }

@@ -11,6 +11,7 @@
 #include <memory>
 #include <atomic>
 #include <mutex>
+#include <iostream>
 
 namespace vtt {
 
@@ -73,17 +74,30 @@ public:
 
     // Configuration for personal commands
     struct Config {
-        float dtw_threshold = 0.80f;           // DTW similarity threshold
-        size_t max_command_history = 1000;    // Command history size
-        bool enable_learning = true;           // Learn from usage patterns
-        bool enable_security_validation = true; // Security validation
-        bool enable_confirmation_for_system = true; // Confirm system commands
-        std::string config_file = "~/.config/voice-to-text/personal_commands.json";
+        float dtw_threshold;
+        size_t max_command_history;
+        bool enable_learning;
+        bool enable_security_validation;
+        bool enable_confirmation_for_system;
+        std::string config_file;
 
         // Performance tuning
-        size_t dtw_cache_size = 100;          // DTW result cache
-        float confidence_boost = 0.1f;        // Boost for frequently used commands
-        size_t pattern_cache_ms = 5000;       // Pattern cache lifetime
+        size_t dtw_cache_size;
+        float confidence_boost;
+        size_t pattern_cache_ms;
+
+        // Default constructor
+        Config()
+            : dtw_threshold(0.80f)
+            , max_command_history(1000)
+            , enable_learning(true)
+            , enable_security_validation(true)
+            , enable_confirmation_for_system(true)
+            , config_file("~/.config/voice-to-text/personal_commands.json")
+            , dtw_cache_size(100)
+            , confidence_boost(0.1f)
+            , pattern_cache_ms(5000)
+        {}
     };
 
     using CommandCallback = std::function<void(const ExecutionResult&)>;
@@ -401,7 +415,7 @@ inline float PersonalVoiceCommands::compute_dtw_similarity(const std::string& in
         auto it = dtw_cache_.find(cache_key);
         if (it != dtw_cache_.end()) {
             auto age = std::chrono::steady_clock::now() - it->second.timestamp;
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(age).count() < config_.pattern_cache_ms) {
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(age).count() < static_cast<long>(config_.pattern_cache_ms)) {
                 return it->second.similarity;
             } else {
                 dtw_cache_.erase(it);

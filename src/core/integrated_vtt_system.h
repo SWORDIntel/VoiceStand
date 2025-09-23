@@ -55,7 +55,8 @@ public:
     
     using ResultCallback = std::function<void(const EnhancedResult&)>;
     
-    IntegratedVTTSystem(const Config& config = Config());
+    IntegratedVTTSystem(const Config& config);
+    IntegratedVTTSystem();
     ~IntegratedVTTSystem();
     
     // Initialize all subsystems
@@ -381,7 +382,7 @@ inline void IntegratedVTTSystem::print_performance_report() const {
     std::cout << "Noise reduction: " << stats_.noise_reduction_avg_db << " dB\n";
     
     // Whisper stats
-    auto whisper_metrics = whisper_->get_metrics();
+    const auto& whisper_metrics = whisper_->get_metrics();
     std::cout << "\nWhisper Performance:\n";
     std::cout << "  Chunks processed: " << whisper_metrics.chunks_processed << "\n";
     std::cout << "  Average latency: " << whisper_metrics.average_latency_ms() << " ms\n";

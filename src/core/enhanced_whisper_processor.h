@@ -5,6 +5,7 @@
 #include "memory_pool.h"
 #include <atomic>
 #include <chrono>
+#include <iostream>
 
 namespace vtt {
 
@@ -28,6 +29,33 @@ public:
         std::atomic<size_t> min_latency_ms{SIZE_MAX};
         std::atomic<size_t> max_latency_ms{0};
         std::atomic<size_t> dropped_chunks{0};
+
+        // Delete copy constructor and assignment operator for atomic members
+        PerformanceMetrics() = default;
+        PerformanceMetrics(const PerformanceMetrics&) = delete;
+        PerformanceMetrics& operator=(const PerformanceMetrics&) = delete;
+
+        // Move constructor and assignment operator
+        PerformanceMetrics(PerformanceMetrics&& other) noexcept
+            : total_samples_processed(other.total_samples_processed.load()),
+              chunks_processed(other.chunks_processed.load()),
+              total_latency_ms(other.total_latency_ms.load()),
+              min_latency_ms(other.min_latency_ms.load()),
+              max_latency_ms(other.max_latency_ms.load()),
+              dropped_chunks(other.dropped_chunks.load()) {
+        }
+
+        PerformanceMetrics& operator=(PerformanceMetrics&& other) noexcept {
+            if (this != &other) {
+                total_samples_processed.store(other.total_samples_processed.load());
+                chunks_processed.store(other.chunks_processed.load());
+                total_latency_ms.store(other.total_latency_ms.load());
+                min_latency_ms.store(other.min_latency_ms.load());
+                max_latency_ms.store(other.max_latency_ms.load());
+                dropped_chunks.store(other.dropped_chunks.load());
+            }
+            return *this;
+        }
         
         void update_latency(size_t latency_ms) {
             total_latency_ms += latency_ms;

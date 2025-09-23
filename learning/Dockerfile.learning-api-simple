@@ -1,0 +1,39 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install essential system dependencies only
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies for learning API
+COPY requirements.learning-api.txt .
+RUN pip install --no-cache-dir -r requirements.learning-api.txt
+
+# Copy learning API application
+COPY learning_api/ .
+
+# Create models directory structure (will be mounted as volume)
+RUN mkdir -p ./models/ensemble ./models/fine_tuned ./models/uk_specialized
+
+# Create directories for data and logs
+RUN mkdir -p /app/data /app/logs /app/cache /app/embeddings
+
+# FastAPI configuration
+ENV FASTAPI_ENV=production
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Health check for FastAPI service
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Expose FastAPI port
+EXPOSE 8080
+
+# Run FastAPI with uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]

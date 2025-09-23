@@ -1,0 +1,51 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies including Intel NPU support
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    cmake \
+    git \
+    curl \
+    wget \
+    build-essential \
+    libopenblas-dev \
+    libssl-dev \
+    libffi-dev \
+    intel-opencl-icd \
+    ocl-icd-libopencl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Intel Neural Processing Unit tools
+RUN curl -L https://github.com/intel/intel-npu-acceleration-library/releases/latest/download/intel-npu-acceleration-library.tar.gz \
+    | tar -xz -C /opt/ || echo "NPU library download failed, continuing without NPU optimization"
+
+# Install Python dependencies for training
+COPY requirements.trainer.txt .
+RUN pip install --no-cache-dir -r requirements.trainer.txt
+
+# Install PyTorch with Intel optimizations
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+RUN pip install intel-extension-for-pytorch
+
+# Copy training application
+COPY trainer/ .
+
+# Create directory structure (will be mounted as volumes)
+RUN mkdir -p /app/models/ensemble /app/models/fine_tuned /app/models/uk_specialized
+RUN mkdir -p /app/training_data /app/output /app/logs /app/checkpoints
+
+# Set environment variables for Intel optimizations
+ENV INTEL_EXTENSION_FOR_PYTORCH=1
+ENV IPEX_CPU_OPTIMIZE=1
+ENV OMP_NUM_THREADS=4
+ENV MKL_NUM_THREADS=4
+ENV KMP_AFFINITY=granularity=fine,compact,1,0
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import torch; print('Trainer healthy')" || exit 1
+
+CMD ["python", "continuous_trainer.py"]

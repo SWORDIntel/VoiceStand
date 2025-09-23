@@ -1,0 +1,77 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies with Intel NPU support
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    cmake \
+    git \
+    curl \
+    wget \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    pkg-config \
+    # Intel NPU and optimization libraries
+    intel-opencl-icd \
+    ocl-icd-libopencl1 \
+    libnuma1 \
+    libnuma-dev \
+    # Neural Processing Unit tools
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Intel Neural Processing Unit acceleration library
+RUN curl -L https://github.com/intel/intel-npu-acceleration-library/releases/latest/download/intel-npu-acceleration-library.tar.gz \
+    | tar -xz -C /opt/ || echo "NPU library download failed, continuing with CPU optimization"
+
+# Install Intel oneAPI Base Toolkit components (lightweight)
+RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null \
+    && echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | tee /etc/apt/sources.list.d/oneAPI.list \
+    && apt-get update \
+    && apt-get install -y intel-oneapi-mkl-devel intel-oneapi-dnnl-devel \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Intel environment variables
+ENV INTEL_NPU_ACCELERATION_LIBRARY_PATH=/opt/intel-npu-acceleration-library
+ENV MKLROOT=/opt/intel/oneapi/mkl/latest
+ENV LD_LIBRARY_PATH=/opt/intel/oneapi/mkl/latest/lib/intel64:/opt/intel/oneapi/dnnl/latest/cpu_dpcpp_gpu_dpcpp/lib:$LD_LIBRARY_PATH
+
+# Install Python dependencies
+COPY requirements.optimizer.txt .
+RUN pip install --no-cache-dir -r requirements.optimizer.txt
+
+# Install PyTorch with Intel optimizations
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+RUN pip install intel-extension-for-pytorch
+
+# Install Intel Neural Compressor for model optimization
+RUN pip install neural-compressor
+
+# Copy optimizer application
+COPY optimizer/ .
+
+# Create directory structure (will be mounted as volumes)
+RUN mkdir -p /app/models/ensemble /app/models/fine_tuned /app/models/uk_specialized
+RUN mkdir -p /app/optimized_models /app/optimization_logs
+
+# Set environment variables for Intel optimizations
+ENV INTEL_EXTENSION_FOR_PYTORCH=1
+ENV IPEX_CPU_OPTIMIZE=1
+ENV OMP_NUM_THREADS=4
+ENV MKL_NUM_THREADS=4
+ENV KMP_AFFINITY=granularity=fine,compact,1,0
+ENV KMP_BLOCKTIME=1
+ENV OMP_DYNAMIC=false
+
+# Intel NPU specific optimizations
+ENV INTEL_NPU_RUNTIME_LEVEL=4
+ENV INTEL_NPU_PRECISION=fp16
+ENV INTEL_NPU_BATCH_SIZE=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import torch; import intel_extension_for_pytorch as ipex; print('Optimizer healthy')" || exit 1
+
+CMD ["python", "model_optimizer_service.py"]

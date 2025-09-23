@@ -701,7 +701,7 @@ void PersonalVoiceCommands::cleanup_caches() {
 
     while (it != dtw_cache_.end()) {
         auto age = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second.timestamp).count();
-        if (age > config_.pattern_cache_ms) {
+        if (age > static_cast<long>(config_.pattern_cache_ms)) {
             it = dtw_cache_.erase(it);
         } else {
             ++it;

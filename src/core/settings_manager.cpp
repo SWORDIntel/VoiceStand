@@ -66,6 +66,8 @@ bool SettingsManager::save_settings() {
         settings_["hotkeys"]["push_to_talk"] = "Ctrl+Space";
         settings_["hotkeys"]["toggle_listening"] = "Ctrl+Shift+L";
         settings_["hotkeys"]["clear_text"] = "Ctrl+Shift+C";
+        settings_["hotkeys"]["toggle_recording_mouse"] = "";  // Disabled by default
+        settings_["hotkeys"]["push_to_talk_mouse"] = "";      // Optional mouse PTT
     }
     
     if (!settings_.isMember("ui")) {
@@ -73,6 +75,46 @@ bool SettingsManager::save_settings() {
         settings_["ui"]["window_opacity"] = 0.95;
         settings_["ui"]["always_on_top"] = false;
         settings_["ui"]["start_minimized"] = false;
+    }
+
+    if (!settings_.isMember("learning_api")) {
+        settings_["learning_api"]["enabled"] = false;
+        settings_["learning_api"]["base_url"] = "http://localhost:5000";
+        settings_["learning_api"]["api_version"] = "v1";
+        settings_["learning_api"]["api_key"] = "";
+        settings_["learning_api"]["connection_timeout_seconds"] = 10;
+        settings_["learning_api"]["request_timeout_seconds"] = 30;
+        settings_["learning_api"]["max_retries"] = 3;
+        settings_["learning_api"]["enable_async_processing"] = true;
+        settings_["learning_api"]["max_concurrent_requests"] = 5;
+        settings_["learning_api"]["enable_batching"] = true;
+        settings_["learning_api"]["batch_size"] = 10;
+        settings_["learning_api"]["enable_offline_queue"] = true;
+        settings_["learning_api"]["offline_queue_max_size"] = 10000;
+    }
+
+    if (!settings_.isMember("ensemble")) {
+        settings_["ensemble"]["enabled"] = false;
+        settings_["ensemble"]["learning_mode"] = "BALANCED";  // CONSERVATIVE, BALANCED, EXPERIMENTAL, ADAPTIVE
+        settings_["ensemble"]["accuracy_target"] = 0.95;
+        settings_["ensemble"]["confidence_threshold"] = 0.85;
+        settings_["ensemble"]["min_ensemble_size"] = 3;
+        settings_["ensemble"]["max_ensemble_size"] = 5;
+        settings_["ensemble"]["enable_uk_dialect_optimization"] = true;
+        settings_["ensemble"]["enable_model_caching"] = true;
+        settings_["ensemble"]["enable_parallel_inference"] = true;
+        settings_["ensemble"]["max_parallel_models"] = 3;
+        settings_["ensemble"]["learning_update_interval_seconds"] = 300;
+    }
+
+    if (!settings_.isMember("adaptive_learning")) {
+        settings_["adaptive_learning"]["enabled"] = false;
+        settings_["adaptive_learning"]["database_url"] = "postgresql://localhost/voicestand_learning";
+        settings_["adaptive_learning"]["pattern_confidence_threshold"] = 0.7;
+        settings_["adaptive_learning"]["uk_pattern_bonus"] = 0.1;
+        settings_["adaptive_learning"]["max_history_size"] = 10000;
+        settings_["adaptive_learning"]["min_pattern_usage"] = 5;
+        settings_["adaptive_learning"]["enable_uk_english_learning"] = true;
     }
     
     // Write to file

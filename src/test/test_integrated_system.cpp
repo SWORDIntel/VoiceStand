@@ -90,8 +90,8 @@ int main(int argc, char* argv[]) {
     
     // Set up audio processing callback
     audio_capture.set_audio_callback(
-        [&vtt_system](const float* samples, size_t num_samples) {
-            vtt_system.process_audio(samples, num_samples, 16000);
+        [&vtt_system](const AudioData& audio_data) {
+            vtt_system.process_audio(audio_data.samples, audio_data.num_samples, audio_data.sample_rate);
         }
     );
     

@@ -23,7 +23,8 @@ public:
         bool use_echo_cancellation = true;
     };
     
-    NoiseCancellation(const Config& config = Config(), uint32_t sample_rate = 16000);
+    NoiseCancellation(const Config& config, uint32_t sample_rate = 16000);
+    NoiseCancellation(uint32_t sample_rate = 16000);
     ~NoiseCancellation();
     
     // Process audio frame

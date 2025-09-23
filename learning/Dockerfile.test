@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Test minimal build
+RUN echo "Test build successful"
+
+COPY learning_api/main.py .
+
+RUN mkdir -p /app/models /app/data
+
+CMD ["echo", "Test container ready"]

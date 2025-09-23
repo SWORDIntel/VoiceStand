@@ -1,0 +1,53 @@
+FROM grafana/grafana:10.2.0
+
+USER root
+
+# Install additional dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    python3 \
+    python3-pip \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python monitoring tools
+COPY requirements.monitor.txt /tmp/
+RUN pip3 install -r /tmp/requirements.monitor.txt
+
+# Copy monitoring configuration
+COPY monitor/ /app/
+COPY grafana/ /etc/grafana/provisioning/
+
+# Create custom dashboards directory
+RUN mkdir -p /var/lib/grafana/dashboards
+
+# Copy VoiceStand dashboards
+COPY grafana/dashboards/ /var/lib/grafana/dashboards/
+
+# Copy monitoring scripts
+COPY monitor/performance_monitor.py /app/
+COPY monitor/metrics_collector.py /app/
+COPY monitor/alerting.py /app/
+
+# Set up Grafana configuration
+COPY grafana/grafana.ini /etc/grafana/grafana.ini
+COPY grafana/datasources/ /etc/grafana/provisioning/datasources/
+COPY grafana/dashboards/ /etc/grafana/provisioning/dashboards/
+
+# Create startup script
+COPY monitor/start_monitor.sh /start_monitor.sh
+RUN chmod +x /start_monitor.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Switch back to grafana user
+USER grafana
+
+# Expose Grafana port
+EXPOSE 3000
+
+# Start both Grafana and monitoring services
+CMD ["/start_monitor.sh"]

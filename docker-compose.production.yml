@@ -1,0 +1,366 @@
+version: '3.8'
+
+# VoiceStand Production Learning System
+# Comprehensive Docker-based continuous learning for 94-99% accuracy
+
+services:
+  # PostgreSQL with pgvector for ML embeddings and learning data
+  voicestand-learning-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: voicestand_learning
+      POSTGRES_USER: voicestand
+      POSTGRES_PASSWORD: ${LEARNING_DB_PASSWORD:-learning_pass_prod}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - learning_data_prod:/var/lib/postgresql/data
+      - ./learning/sql:/docker-entrypoint-initdb.d
+    ports:
+      - "${LEARNING_DB_PORT:-5433}:5432"
+    networks:
+      - voicestand-learning
+    command: postgres -c shared_preload_libraries=vector -c max_connections=200 -c shared_buffers=256MB
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voicestand -d voicestand_learning"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Redis for real-time data streaming and caching
+  learning-redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - voicestand-learning
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Learning API - Core orchestration service
+  learning-api:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.learning-api
+      args:
+        ENABLE_INTEL_OPTIMIZATIONS: "true"
+    depends_on:
+      voicestand-learning-db:
+        condition: service_healthy
+      learning-redis:
+        condition: service_healthy
+    ports:
+      - "${LEARNING_API_PORT:-8080}:8080"
+    environment:
+      # Database configuration
+      LEARNING_DB_URL: postgresql://voicestand:${LEARNING_DB_PASSWORD:-learning_pass_prod}@voicestand-learning-db:5432/voicestand_learning
+      REDIS_URL: redis://learning-redis:6379
+
+      # Learning parameters
+      ACCURACY_TARGET: ${ACCURACY_TARGET:-0.95}
+      LEARNING_RATE: ${LEARNING_RATE:-0.001}
+      UK_ENGLISH_SPECIALIZATION: "true"
+      ENSEMBLE_SIZE: ${ENSEMBLE_SIZE:-5}
+
+      # Performance optimization
+      ENABLE_PERFORMANCE_MONITORING: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # Intel optimizations
+      INTEL_EXTENSION_FOR_PYTORCH: "1"
+      IPEX_CPU_OPTIMIZE: "1"
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-4}
+      MKL_NUM_THREADS: ${MKL_NUM_THREADS:-4}
+    volumes:
+      - ./models:/app/models:ro
+      - ./learning_data:/app/data
+      - learning_logs:/app/logs
+    networks:
+      - voicestand-learning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  # Model Optimizer - Intel NPU accelerated optimization
+  recognition-optimizer:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.optimizer
+      args:
+        ENABLE_INTEL_NPU: "true"
+    depends_on:
+      learning-api:
+        condition: service_healthy
+    environment:
+      LEARNING_API_URL: http://learning-api:8080
+      ACCURACY_TARGET: ${ACCURACY_TARGET:-0.95}
+      OPTIMIZATION_INTERVAL: ${OPTIMIZATION_INTERVAL:-300}
+      UK_DIALECT_FOCUS: "true"
+
+      # Intel NPU optimizations
+      INTEL_NPU_RUNTIME_LEVEL: "4"
+      INTEL_NPU_PRECISION: "fp16"
+      INTEL_NPU_BATCH_SIZE: "1"
+
+      # CPU optimizations
+      INTEL_EXTENSION_FOR_PYTORCH: "1"
+      IPEX_CPU_OPTIMIZE: "1"
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-4}
+      MKL_NUM_THREADS: ${MKL_NUM_THREADS:-4}
+      KMP_AFFINITY: "granularity=fine,compact,1,0"
+    volumes:
+      - ./models:/app/models
+      - ./optimization_logs:/app/logs
+      - optimized_models:/app/optimized_models
+    networks:
+      - voicestand-learning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; import intel_extension_for_pytorch as ipex; print('Optimizer healthy')"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '4.0'
+        reservations:
+          memory: 2G
+          cpus: '2.0'
+
+  # Continuous Model Trainer
+  model-trainer:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.trainer
+      args:
+        ENABLE_INTEL_OPTIMIZATIONS: "true"
+    depends_on:
+      learning-api:
+        condition: service_healthy
+    environment:
+      LEARNING_API_URL: http://learning-api:8080
+      TRAINING_SCHEDULE: ${TRAINING_SCHEDULE:-"0 */6 * * *"}
+      BATCH_SIZE: ${TRAINING_BATCH_SIZE:-8}
+      LEARNING_RATE: ${TRAINING_LEARNING_RATE:-1e-5}
+      NUM_EPOCHS: ${TRAINING_EPOCHS:-10}
+      UK_ENGLISH_DATASET: "true"
+
+      # Intel optimizations
+      INTEL_EXTENSION_FOR_PYTORCH: "1"
+      IPEX_CPU_OPTIMIZE: "1"
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-4}
+      MKL_NUM_THREADS: ${MKL_NUM_THREADS:-4}
+    volumes:
+      - ./models:/app/models
+      - ./training_data:/app/training_data
+      - ./fine_tuned_models:/app/output
+      - training_logs:/app/logs
+    networks:
+      - voicestand-learning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; print('Trainer healthy')"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '4.0'
+        reservations:
+          memory: 3G
+          cpus: '2.0'
+
+  # Performance Monitor with Grafana dashboard
+  performance-monitor:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.monitor
+    depends_on:
+      learning-api:
+        condition: service_healthy
+      voicestand-learning-db:
+        condition: service_healthy
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+      - "${PROMETHEUS_PORT:-8000}:8000"
+    environment:
+      LEARNING_API_URL: http://learning-api:8080
+      LEARNING_DB_URL: postgresql://voicestand:${LEARNING_DB_PASSWORD:-learning_pass_prod}@voicestand-learning-db:5432/voicestand_learning
+      MONITOR_INTERVAL: ${MONITOR_INTERVAL:-10}
+      ACCURACY_ALERTS: "true"
+      ACCURACY_ALERT_THRESHOLD: ${ACCURACY_ALERT_THRESHOLD:-0.85}
+      UK_ACCURACY_ALERT_THRESHOLD: ${UK_ACCURACY_ALERT_THRESHOLD:-0.90}
+
+      # Grafana configuration
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-voicestand_admin}
+      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
+    volumes:
+      - monitoring_data_prod:/var/lib/grafana
+      - ./learning/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - voicestand-learning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Real-time Learning Pipeline
+  learning-pipeline:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.learning-api
+    depends_on:
+      learning-api:
+        condition: service_healthy
+      learning-redis:
+        condition: service_healthy
+    environment:
+      LEARNING_DB_URL: postgresql://voicestand:${LEARNING_DB_PASSWORD:-learning_pass_prod}@voicestand-learning-db:5432/voicestand_learning
+      LEARNING_API_URL: http://learning-api:8080
+      REDIS_URL: redis://learning-redis:6379
+
+      # Pipeline configuration
+      PATTERN_RECOGNITION_ENABLED: "true"
+      REAL_TIME_LEARNING_ENABLED: "true"
+      UK_PATTERN_DETECTION: "true"
+    volumes:
+      - ./learning_data:/app/data
+      - pipeline_logs:/app/logs
+    networks:
+      - voicestand-learning
+    command: ["python", "/app/metrics_collector.py"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r=redis.Redis(host='learning-redis'); r.ping(); print('Pipeline healthy')"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+  # Nginx reverse proxy for production deployment
+  learning-gateway:
+    image: nginx:alpine
+    ports:
+      - "${GATEWAY_PORT:-80}:80"
+      - "${GATEWAY_SSL_PORT:-443}:443"
+    volumes:
+      - ./learning/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./learning/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - learning-api
+      - performance-monitor
+    networks:
+      - voicestand-learning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# Production volumes with proper backup strategies
+volumes:
+  learning_data_prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LEARNING_DATA_PATH:-./data/postgres}
+
+  redis_data_prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${REDIS_DATA_PATH:-./data/redis}
+
+  monitoring_data_prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${MONITORING_DATA_PATH:-./data/grafana}
+
+  optimized_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${OPTIMIZED_MODELS_PATH:-./data/optimized_models}
+
+  learning_logs:
+    driver: local
+
+  training_logs:
+    driver: local
+
+  pipeline_logs:
+    driver: local
+
+# Production network configuration
+networks:
+  voicestand-learning:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+
+# Production configuration notes:
+#
+# Environment Variables (create .env file):
+# LEARNING_DB_PASSWORD=secure_production_password
+# GRAFANA_ADMIN_PASSWORD=secure_grafana_password
+# ACCURACY_TARGET=0.95
+# ENSEMBLE_SIZE=5
+# OMP_NUM_THREADS=4
+# MKL_NUM_THREADS=4
+# LOG_LEVEL=INFO
+#
+# Data Persistence:
+# LEARNING_DATA_PATH=/production/data/postgres
+# REDIS_DATA_PATH=/production/data/redis
+# MONITORING_DATA_PATH=/production/data/grafana
+# OPTIMIZED_MODELS_PATH=/production/data/models
+#
+# Port Configuration:
+# LEARNING_API_PORT=8080
+# GRAFANA_PORT=3000
+# PROMETHEUS_PORT=8000
+# GATEWAY_PORT=80
+# GATEWAY_SSL_PORT=443
+#
+# Performance Tuning:
+# TRAINING_BATCH_SIZE=16
+# OPTIMIZATION_INTERVAL=300
+# MONITOR_INTERVAL=10
+# ACCURACY_ALERT_THRESHOLD=0.85
+# UK_ACCURACY_ALERT_THRESHOLD=0.90

@@ -13,6 +13,21 @@ pkg_check_modules(PULSE REQUIRED libpulse)
 find_package(X11 REQUIRED)
 find_package(Threads REQUIRED)
 find_package(jsoncpp REQUIRED)
+find_package(PkgConfig REQUIRED)
+
+# Find libcurl for HTTP client
+pkg_check_modules(CURL REQUIRED libcurl)
+
+# Find FFTW3 for audio feature extraction (optional for basic functionality)
+pkg_check_modules(FFTW3 fftw3)
+
+# Check if FFTW3 was found
+if(FFTW3_FOUND)
+    message(STATUS "FFTW3 found - enabling advanced audio feature extraction")
+    add_definitions(-DHAVE_FFTW3)
+else()
+    message(STATUS "FFTW3 not found - using basic audio features only")
+endif()
 
 set(WHISPER_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/include" 
     CACHE PATH "Path to whisper.cpp include directory")
@@ -24,6 +39,12 @@ add_executable(voice-to-text
     src/core/audio_capture.cpp
     src/core/whisper_processor.cpp
     src/core/personal_voice_commands.cpp
+    src/core/learning_api_client.cpp
+    src/core/ensemble_whisper_processor.cpp
+    src/core/adaptive_learning_system.cpp
+    src/core/audio_feature_serializer.cpp
+    src/core/learning_system_manager.cpp
+    src/core/settings_manager.cpp
     src/gui/main_window.cpp
     src/integration/hotkey_manager.cpp
 )
@@ -35,13 +56,25 @@ target_include_directories(voice-to-text PRIVATE
     ${X11_INCLUDE_DIR}
     ${WHISPER_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/ggml/include
+    ${CURL_INCLUDE_DIRS}
 )
+
+# Conditionally add FFTW3 includes
+if(FFTW3_FOUND)
+    target_include_directories(voice-to-text PRIVATE ${FFTW3_INCLUDE_DIRS})
+endif()
 
 target_compile_options(voice-to-text PRIVATE
     ${GTK4_CFLAGS_OTHER}
     ${PULSE_CFLAGS_OTHER}
+    ${CURL_CFLAGS_OTHER}
     -Wall -Wextra -O2
 )
+
+# Conditionally add FFTW3 compile options
+if(FFTW3_FOUND)
+    target_compile_options(voice-to-text PRIVATE ${FFTW3_CFLAGS_OTHER})
+endif()
 
 target_link_directories(voice-to-text PRIVATE
     ${WHISPER_LIB_DIR}/src
@@ -52,6 +85,7 @@ target_link_libraries(voice-to-text PRIVATE
     ${GTK4_LIBRARIES}
     ${PULSE_LIBRARIES}
     ${X11_LIBRARIES}
+    ${CURL_LIBRARIES}
     Xtst
     ${CMAKE_THREAD_LIBS_INIT}
     jsoncpp_lib
@@ -60,6 +94,11 @@ target_link_libraries(voice-to-text PRIVATE
     m
     stdc++fs
 )
+
+# Conditionally add FFTW3 libraries
+if(FFTW3_FOUND)
+    target_link_libraries(voice-to-text PRIVATE ${FFTW3_LIBRARIES})
+endif()
 
 install(TARGETS voice-to-text
     RUNTIME DESTINATION bin
@@ -92,6 +131,7 @@ add_executable(personal_gna_week1_demo
 add_executable(gna_power_test
     src/core/gna_power_test.cpp
     src/core/gna_voice_detector.cpp
+    src/core/gna_device_manager.cpp
 )
 
 # Check for OpenVINO installation
@@ -238,4 +278,41 @@ target_link_libraries(test_personal_commands PRIVATE
     ggml
     m
     stdc++fs
+)
+
+# Mouse button test executable
+add_executable(test-mouse-buttons
+    test_mouse_buttons.cpp
+    src/integration/hotkey_manager.cpp
+)
+
+target_include_directories(test-mouse-buttons PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${X11_INCLUDE_DIR}
+)
+
+target_compile_options(test-mouse-buttons PRIVATE
+    -Wall -Wextra -O2
+)
+
+target_link_libraries(test-mouse-buttons PRIVATE
+    ${X11_LIBRARIES}
+    Threads::Threads
+)
+
+# Mouse button discovery tool
+add_executable(mouse-button-monitor
+    mouse_button_monitor.cpp
+)
+
+target_include_directories(mouse-button-monitor PRIVATE
+    ${X11_INCLUDE_DIR}
+)
+
+target_compile_options(mouse-button-monitor PRIVATE
+    -Wall -Wextra -O2
+)
+
+target_link_libraries(mouse-button-monitor PRIVATE
+    ${X11_LIBRARIES}
 )

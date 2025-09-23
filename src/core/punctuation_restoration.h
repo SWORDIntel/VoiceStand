@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <regex>
 #include <algorithm>
 #include <sstream>
@@ -21,7 +22,8 @@ public:
         float confidence_threshold = 0.7f;
     };
     
-    PunctuationRestoration(const Config& config = Config());
+    PunctuationRestoration(const Config& config);
+    PunctuationRestoration();
     
     // Restore punctuation in text
     std::string restore(const std::string& text);

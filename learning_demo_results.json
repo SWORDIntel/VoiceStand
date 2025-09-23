@@ -1,0 +1,152 @@
+[
+  {
+    "timestamp": "2025-09-23T05:06:45.837643",
+    "text": "Hello, I need to find the nearest elevator",
+    "confidence": 0.8775000000000001,
+    "is_uk_english": false,
+    "ensemble_confidence": 0.8775000000000001,
+    "uk_boost": 0.0,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:46.337804",
+    "text": "Hello, I need to find the nearest lift",
+    "confidence": 0.8775000000000001,
+    "is_uk_english": true,
+    "ensemble_confidence": 0.8775000000000001,
+    "uk_boost": 0.0,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:46.837956",
+    "text": "My apartment is on the third floor",
+    "confidence": 0.8800000000000001,
+    "is_uk_english": false,
+    "ensemble_confidence": 0.8800000000000001,
+    "uk_boost": 0.0,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:47.338134",
+    "text": "My flat is on the third floor",
+    "confidence": 0.8900000000000001,
+    "is_uk_english": true,
+    "ensemble_confidence": 0.8800000000000001,
+    "uk_boost": 0.01,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:47.838278",
+    "text": "I need to buy some gasoline for the truck",
+    "confidence": 0.8800000000000001,
+    "is_uk_english": false,
+    "ensemble_confidence": 0.8800000000000001,
+    "uk_boost": 0.0,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:48.338497",
+    "text": "I need to buy some petrol for the lorry",
+    "confidence": 0.9000000000000001,
+    "is_uk_english": true,
+    "ensemble_confidence": 0.8800000000000001,
+    "uk_boost": 0.02,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:48.838720",
+    "text": "Please take out the garbage",
+    "confidence": 0.8800000000000001,
+    "is_uk_english": false,
+    "ensemble_confidence": 0.8800000000000001,
+    "uk_boost": 0.0,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:49.339006",
+    "text": "Please take out the rubbish",
+    "confidence": 0.9200000000000002,
+    "is_uk_english": true,
+    "ensemble_confidence": 0.8800000000000001,
+    "uk_boost": 0.04,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:49.839183",
+    "text": "The elevator in my apartment building is broken",
+    "confidence": 0.8800000000000001,
+    "is_uk_english": false,
+    "ensemble_confidence": 0.8800000000000001,
+    "uk_boost": 0.0,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  },
+  {
+    "timestamp": "2025-09-23T05:06:50.339399",
+    "text": "The lift in my flat building is broken",
+    "confidence": 0.9300000000000002,
+    "is_uk_english": true,
+    "ensemble_confidence": 0.8800000000000001,
+    "uk_boost": 0.05,
+    "models_used": [
+      "whisper_small",
+      "whisper_medium",
+      "whisper_large",
+      "uk_fine_tuned_small",
+      "uk_fine_tuned_medium"
+    ]
+  }
+]

@@ -6,6 +6,7 @@
 #include <memory>
 #include <atomic>
 #include <functional>
+#include <iostream>
 
 namespace vtt {
 
@@ -58,7 +59,8 @@ public:
 
     using SystemCallback = std::function<void(const SystemResult&)>;
 
-    Phase2PersonalCommandsIntegration(const Config& config = Config());
+    Phase2PersonalCommandsIntegration(const Config& config);
+    Phase2PersonalCommandsIntegration();
     ~Phase2PersonalCommandsIntegration();
 
     // System lifecycle
@@ -302,7 +304,7 @@ inline void Phase2PersonalCommandsIntegration::handle_wake_word_detection(const 
 
 inline void Phase2PersonalCommandsIntegration::transition_to_mode(OperationMode new_mode) {
     if (current_mode_ != new_mode) {
-        std::cout << "[INFO] Mode transition: " << static_cast<int>(current_mode_)
+        std::cout << "[INFO] Mode transition: " << static_cast<int>(current_mode_.load())
                   << " -> " << static_cast<int>(new_mode) << "\n";
 
         current_mode_ = new_mode;

@@ -1,4 +1,5 @@
 #include "whisper_processor.h"
+#include "learning_api_client.h"
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -182,6 +183,14 @@ void WhisperProcessor::processing_loop() {
                 if (transcription_callback_) {
                     transcription_callback_(result);
                 }
+
+                // Submit to learning system if available
+                {
+                    std::lock_guard<std::mutex> learning_lock(learning_mutex_);
+                    if (learning_integration_) {
+                        learning_integration_->handle_transcription_result(result);
+                    }
+                }
             }
             
             if (accumulated_samples.size() > max_samples) {
@@ -305,6 +314,21 @@ bool WhisperProcessor::download_model(const std::string& model_size,
     
     std::cout << "Model downloaded successfully to " << dest_path << "\n";
     return true;
+}
+
+void WhisperProcessor::set_learning_integration(std::shared_ptr<LearningSystemIntegration> integration) {
+    std::lock_guard<std::mutex> lock(learning_mutex_);
+    learning_integration_ = integration;
+
+    // Configure the integration to work with this processor
+    if (learning_integration_) {
+        learning_integration_->integrate_with_whisper_processor(this);
+    }
+}
+
+std::shared_ptr<LearningSystemIntegration> WhisperProcessor::get_learning_integration() const {
+    std::lock_guard<std::mutex> lock(learning_mutex_);
+    return learning_integration_;
 }
 
 }

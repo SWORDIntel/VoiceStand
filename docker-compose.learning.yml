@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector for ML embeddings
+  voicestand-learning-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: voicestand_learning
+      POSTGRES_USER: voicestand
+      POSTGRES_PASSWORD: learning_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - learning_data:/var/lib/postgresql/data
+      - ./learning/sql:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    networks:
+      - voicestand-learning
+    command: postgres -c shared_preload_libraries=vector
+
+  # Learning API for pattern recognition and model optimization
+  learning-api:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.learning-api
+    depends_on:
+      - voicestand-learning-db
+    ports:
+      - "8080:8080"
+    environment:
+      LEARNING_DB_URL: postgresql://voicestand:learning_pass@voicestand-learning-db:5432/voicestand_learning
+      ACCURACY_TARGET: 0.95
+      LEARNING_RATE: 0.001
+      UK_ENGLISH_SPECIALIZATION: true
+      ENSEMBLE_SIZE: 5
+    volumes:
+      - ./models:/app/models
+      - ./learning_data:/app/data
+    networks:
+      - voicestand-learning
+
+  # Recognition optimizer with ensemble methods
+  recognition-optimizer:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.optimizer
+    depends_on:
+      - learning-api
+    environment:
+      LEARNING_API_URL: http://learning-api:8080
+      ACCURACY_TARGET: 0.95
+      OPTIMIZATION_INTERVAL: 300  # 5 minutes
+      UK_DIALECT_FOCUS: true
+    volumes:
+      - ./models:/app/models
+      - ./optimization_logs:/app/logs
+    networks:
+      - voicestand-learning
+
+  # Continuous model trainer
+  model-trainer:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.trainer
+    depends_on:
+      - learning-api
+    environment:
+      LEARNING_API_URL: http://learning-api:8080
+      TRAINING_SCHEDULE: "0 */6 * * *"  # Every 6 hours
+      BATCH_SIZE: 32
+      UK_ENGLISH_DATASET: true
+    volumes:
+      - ./models:/app/models
+      - ./training_data:/app/training_data
+      - ./fine_tuned_models:/app/output
+    networks:
+      - voicestand-learning
+
+  # Performance monitor and metrics collection
+  performance-monitor:
+    build:
+      context: ./learning
+      dockerfile: Dockerfile.monitor
+    depends_on:
+      - learning-api
+    ports:
+      - "3000:3000"  # Grafana dashboard
+    environment:
+      LEARNING_API_URL: http://learning-api:8080
+      MONITOR_INTERVAL: 10  # seconds
+      ACCURACY_ALERTS: true
+    volumes:
+      - monitoring_data:/var/lib/grafana
+    networks:
+      - voicestand-learning
+
+volumes:
+  learning_data:
+  monitoring_data:
+
+networks:
+  voicestand-learning:
+    driver: bridge

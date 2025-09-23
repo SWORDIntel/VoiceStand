@@ -1,0 +1,45 @@
+{
+  "audio": {
+    "sample_rate": 16000,
+    "vad_threshold": 0.3,
+    "device": "default"
+  },
+  "whisper": {
+    "model_path": "~/.config/voice-to-text/models/ggml-base.bin",
+    "language": "auto",
+    "num_threads": 4
+  },
+  "hotkeys": {
+    "toggle_recording": "Ctrl+Alt+Space",
+    "push_to_talk": "Ctrl+Alt+V",
+    "toggle_recording_mouse": "Right",
+    "additional_bindings": {
+      "quick_transcribe": "Ctrl+Middle",
+      "pause_recording": "Alt+Right",
+      "volume_up": "Ctrl+ScrollUp",
+      "volume_down": "Ctrl+ScrollDown",
+      "settings": "Shift+Back",
+      "help": "Shift+Forward"
+    }
+  },
+  "ui": {
+    "theme": "system",
+    "show_waveform": true,
+    "auto_scroll": true
+  },
+  "_comments": {
+    "mouse_buttons": [
+      "Supported mouse buttons:",
+      "Left, Middle, Right - Basic mouse buttons",
+      "ScrollUp, ScrollDown - Scroll wheel",
+      "Back, Forward - Side buttons (if available)",
+      "Button1-Button9 - Numeric button references",
+      "",
+      "Modifiers can be combined:",
+      "Ctrl+Right, Alt+Middle, Shift+Left, etc.",
+      "",
+      "Note: Mouse button bindings are global system-wide hotkeys.",
+      "Be careful not to interfere with other applications."
+    ]
+  }
+}

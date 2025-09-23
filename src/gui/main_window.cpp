@@ -22,8 +22,9 @@ MainWindow::MainWindow()
     , drawing_area_(nullptr)
     , is_recording_(false)
     , window_visible_(true)
-    , security_interface_(nullptr)
-    , security_bridge_(nullptr) {
+    // , security_interface_(nullptr)
+    // , security_bridge_(nullptr)
+    {
     instance_ = this;
 }
 
@@ -154,6 +155,7 @@ void MainWindow::show_notification(const std::string& title, const std::string& 
 
 void MainWindow::cleanup() {
     // Cleanup security interface before destroying app
+    /*
     if (security_interface_) {
         security_interface_->cleanup();
         security_interface_.reset();
@@ -163,6 +165,7 @@ void MainWindow::cleanup() {
         security_bridge_->cleanup();
         security_bridge_.reset();
     }
+    */
 
     if (app_) {
         g_object_unref(app_);
@@ -531,6 +534,7 @@ void MainWindow::save_settings_from_dialog(GtkWidget* dialog) {
 
 // Security interface integration methods
 void MainWindow::initialize_security_interface() {
+    /*
     try {
         // Initialize security bridge first
         security_bridge_ = std::make_unique<SecurityHardwareBridge>();
@@ -594,9 +598,11 @@ void MainWindow::initialize_security_interface() {
     } catch (const std::exception& e) {
         std::cerr << "Error initializing security interface: " << e.what() << std::endl;
     }
+    */
 }
 
 void MainWindow::update_security_status() {
+    /*
     if (!security_bridge_ || !security_interface_) {
         return;
     }
@@ -624,8 +630,10 @@ void MainWindow::update_security_status() {
     } catch (const std::exception& e) {
         std::cerr << "Error updating security status: " << e.what() << std::endl;
     }
+    */
 }
 
+/*
 HardwareCapabilities MainWindow::get_hardware_capabilities() {
     if (!security_bridge_) {
         return HardwareCapabilities{}; // Return default capabilities
@@ -641,5 +649,6 @@ SecurityMetrics MainWindow::get_security_metrics() {
 
     return security_bridge_->get_current_security_metrics();
 }
+*/
 
 }

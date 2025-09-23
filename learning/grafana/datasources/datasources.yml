@@ -1,0 +1,34 @@
+apiVersion: 1
+
+datasources:
+  - name: PostgreSQL-VoiceStand
+    type: postgres
+    access: proxy
+    url: voicestand-learning-db:5432
+    database: voicestand_learning
+    user: voicestand
+    secureJsonData:
+      password: learning_pass
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 10
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    isDefault: true
+
+  - name: Prometheus-VoiceStand
+    type: prometheus
+    access: proxy
+    url: http://localhost:8000
+    jsonData:
+      timeInterval: 10s
+      queryTimeout: 60s
+    isDefault: false
+
+  - name: VoiceStand-Learning-API
+    type: json
+    access: proxy
+    url: http://learning-api:8080/api/v1
+    jsonData:
+      timeout: 30
+    isDefault: false

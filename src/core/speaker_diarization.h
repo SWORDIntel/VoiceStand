@@ -8,6 +8,8 @@
 #include <cmath>
 #include <algorithm>
 #include <numeric>
+#include <sstream>
+#include <iomanip>
 
 namespace vtt {
 
@@ -104,7 +106,8 @@ public:
         std::string text;
     };
     
-    SpeakerDiarization(const Config& config = Config());
+    SpeakerDiarization();
+    SpeakerDiarization(const Config& config);
     
     // Process audio and identify speaker
     std::string process_audio(const float* samples, size_t num_samples, 
@@ -156,7 +159,11 @@ private:
 };
 
 // Implementation
-inline SpeakerDiarization::SpeakerDiarization(const Config& config) 
+inline SpeakerDiarization::SpeakerDiarization()
+    : config_(Config{}) {
+}
+
+inline SpeakerDiarization::SpeakerDiarization(const Config& config)
     : config_(config) {
 }
 
