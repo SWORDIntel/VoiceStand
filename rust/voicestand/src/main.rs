@@ -56,7 +56,7 @@ impl VoiceStandApp {
                 error!("❌ Failed to start system: {}", e);
                 return Err(e);
             }
-        }
+        };
 
         // Print system status
         self.print_system_status().await;
@@ -73,7 +73,7 @@ impl VoiceStandApp {
         info!("Press Ctrl+Alt+Space to activate, or say 'voicestand' for wake word activation");
 
         // Setup graceful shutdown
-        let mut shutdown_signal = signal::ctrl_c();
+        let mut shutdown_signal = Box::pin(signal::ctrl_c());
 
         loop {
             tokio::select! {
@@ -227,9 +227,9 @@ impl VoiceStandApp {
 
     /// Print periodic status updates
     async fn print_periodic_status(&self) {
-        if self.config.debug_mode {
-            self.print_system_status().await;
-        }
+        // Print status in development builds
+        #[cfg(debug_assertions)]
+        self.print_system_status().await;
     }
 
     /// Shutdown the application
@@ -267,7 +267,7 @@ async fn main() -> Result<()> {
     print_banner();
 
     // Load configuration
-    let config = VoiceStandConfig::load_or_default().unwrap_or_else(|e| {
+    let config = VoiceStandConfig::load().unwrap_or_else(|e| {
         warn!("Failed to load config: {} - using defaults", e);
         VoiceStandConfig::default()
     });

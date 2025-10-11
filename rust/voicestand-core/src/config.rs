@@ -1,4 +1,4 @@
-use crate::{AudioConfig, SpeechConfig, GuiConfig, HotkeyConfig, Result, VoiceStandError};
+use voicestand_types::{AudioConfig, SpeechConfig, GuiConfig, HotkeyConfig, Result, VoiceStandError};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use directories::ProjectDirs;

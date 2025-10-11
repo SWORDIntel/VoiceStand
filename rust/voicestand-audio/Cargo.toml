@@ -8,7 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-voicestand-core = { path = "../voicestand-core" }
+voicestand-types = { path = "../voicestand-types" }
 cpal.workspace = true
 hound.workspace = true
 dasp.workspace = true

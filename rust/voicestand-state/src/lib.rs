@@ -701,8 +701,8 @@ impl VoiceStandCoordinator {
     pub async fn process_audio_frame(&mut self, audio_data: &[f32]) -> StateResult<Vec<SystemEvent>> {
         let mut events = Vec::new();
 
-        // Process through activation manager (synchronous call, returns single event)
-        if let Ok(Some(activation_event)) = self.activation_manager.process_audio(audio_data) {
+        // Process through activation manager detector (synchronous call, returns single event)
+        if let Ok(Some(activation_event)) = self.activation_manager.detector.process_audio(audio_data) {
             let system_event = SystemEvent::Activation(activation_event.clone());
             events.push(system_event.clone());
             self.send_event(system_event).await?;

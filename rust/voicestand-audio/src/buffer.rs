@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use parking_lot::Mutex;
-use voicestand_core::{Result, VoiceStandError};
+use voicestand_types::{Result, VoiceStandError};
 
 /// Thread-safe circular buffer for audio samples
 pub struct CircularBuffer<T> {

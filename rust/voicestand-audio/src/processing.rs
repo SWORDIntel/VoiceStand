@@ -1,4 +1,4 @@
-use voicestand_core::{Result, VoiceStandError};
+use voicestand_types::{Result, VoiceStandError};
 use dasp::{interpolate::linear::Linear, signal, Signal};
 
 /// Audio processing utilities for noise reduction and enhancement
@@ -74,7 +74,7 @@ impl AudioProcessor {
         Ok(())
     }
 
-    /// Resample audio to target sample rate
+    /// Resample audio to target sample rate using simple linear interpolation
     pub fn resample(&self, input: &[f32], input_rate: u32, output_rate: u32) -> Result<Vec<f32>> {
         if input_rate == output_rate {
             return Ok(input.to_vec());
@@ -82,17 +82,28 @@ impl AudioProcessor {
 
         let ratio = output_rate as f64 / input_rate as f64;
         let output_len = (input.len() as f64 * ratio) as usize;
+        let mut output = Vec::with_capacity(output_len);
 
-        // Simple linear interpolation using dasp
-        let mut signal = signal::from_iter(input.iter().cloned());
-        let interpolator = Linear::new(signal.next(), signal.next());
-        let resampled = signal
-            .interpolate(interpolator)
-            .scale_hz(ratio)
-            .take(output_len)
-            .collect();
+        // Simple linear interpolation
+        for i in 0..output_len {
+            let source_index = i as f64 / ratio;
+            let index = source_index.floor() as usize;
+            let frac = (source_index - index as f64) as f32;
 
-        Ok(resampled)
+            if index + 1 < input.len() {
+                // Linear interpolation between two samples
+                let sample1 = input[index];
+                let sample2 = input[index + 1];
+                let interpolated = sample1 * (1.0 - frac) + sample2 * frac;
+                output.push(interpolated);
+            } else if index < input.len() {
+                output.push(input[index]);
+            } else {
+                output.push(0.0);
+            }
+        }
+
+        Ok(output)
     }
 
     /// Apply pre-emphasis filter (commonly used for speech processing)

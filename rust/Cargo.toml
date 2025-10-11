@@ -1,7 +1,8 @@
 [workspace]
 members = [
+    "voicestand-types",
     "voicestand-core",
-    "voicestand-intel",
+    # "voicestand-intel",  # Disabled - 153 compilation errors, needs major refactoring
     "voicestand-hardware",
     "voicestand-audio",
     "voicestand-state",
@@ -60,6 +61,7 @@ pango = "0.19"
 regex = "1.10"
 base64 = "0.22"
 global-hotkey = "0.5"
+num_cpus = "1.16"
 
 [profile.release]
 opt-level = 3

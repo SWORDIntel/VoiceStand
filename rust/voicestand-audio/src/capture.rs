@@ -1,6 +1,6 @@
 use crate::{VoiceActivityDetector, VADResult};
 use crate::buffer::StreamingBuffer;
-use voicestand_core::{AudioConfig, AudioData, AudioCaptureConfig, AudioDevice, Result, VoiceStandError};
+use voicestand_types::{AudioConfig, AudioData, AudioCaptureConfig, AudioDevice, Result, VoiceStandError, AppEvent};
 
 use cpal::{Device, Stream, StreamConfig, SampleFormat, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -22,7 +22,14 @@ pub struct AudioCapture {
 
 impl AudioCapture {
     pub fn new(config: AudioConfig, event_sender: Sender<AppEvent>) -> Result<Self> {
-        let vad = Arc::new(Mutex::new(VoiceActivityDetector::new(config.vad_threshold, 50)));
+        let vad_config = crate::VADConfig {
+            energy_threshold: config.vad_threshold,
+            sample_rate: config.sample_rate,
+            frame_size: config.frames_per_buffer as usize,
+            silence_duration_ms: 500,  // 500ms of silence to end speech
+            voice_duration_ms: 100,    // 100ms of voice to start speech
+        };
+        let vad = Arc::new(Mutex::new(VoiceActivityDetector::new(vad_config)));
         let streaming_buffer = Arc::new(Mutex::new(StreamingBuffer::new(
             config.frames_per_buffer as usize,
             0.2, // 20% overlap
@@ -195,12 +202,13 @@ impl AudioCapture {
         streaming_buffer.lock().push(data)?;
 
         // Process with VAD
-        let vad_result = vad.lock().process(data);
+        let vad_result = vad.lock().process(data)
+            .map_err(|e| VoiceStandError::audio(format!("VAD processing error: {}", e)))?;
 
         // Send speech detection events
         if vad_result.state_changed {
             let event = AppEvent::SpeechDetected {
-                is_start: vad_result.is_speech,
+                is_start: vad_result.has_voice,
                 timestamp: SystemTime::now(),
             };
             event_sender.send(event)
@@ -208,13 +216,13 @@ impl AudioCapture {
         }
 
         // Create AudioData and send if speech is detected or buffer is ready
-        if vad_result.is_speech || streaming_buffer.lock().stats().available_samples >= sample_rate as usize {
+        if vad_result.has_voice || streaming_buffer.lock().stats().available_samples >= sample_rate as usize {
             let audio_data = AudioData {
                 samples: data.to_vec(),
                 sample_rate,
                 channels,
                 timestamp: SystemTime::now(),
-                is_speech_end: !vad_result.is_speech && vad_result.state_changed,
+                is_speech_end: !vad_result.has_voice && vad_result.state_changed,
             };
 
             event_sender.send(AppEvent::AudioDataReceived(audio_data))

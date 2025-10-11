@@ -12,7 +12,7 @@ voicestand-core = { path = "../voicestand-core" }
 voicestand-audio = { path = "../voicestand-audio" }
 
 # Intel-specific dependencies
-openvino = "0.7"
+openvino = { version = "0.7", features = ["runtime-linking"] }
 intel-mkl-src = { version = "0.8", features = ["mkl-static-lp64-seq"] }
 
 # SIMD and low-level optimizations

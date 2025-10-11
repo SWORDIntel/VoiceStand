@@ -21,8 +21,8 @@ pub use processing::{AudioProcessor, AudioStats};
 pub use vad::{VoiceActivityDetector, VADConfig, VADResult};
 pub use pipeline::{AudioPipeline, PipelineConfig, PipelineEvent};
 
-// Re-export types from voicestand-core for compatibility
-pub use voicestand_core::{AudioCaptureConfig, AudioDevice, AudioSample, AudioFrame};
+// Re-export types from voicestand-types for compatibility
+pub use voicestand_types::{AudioCaptureConfig, AudioDevice};
 
 /// Audio processing error types
 #[derive(Error, Debug, Clone)]
@@ -68,11 +68,10 @@ pub enum AudioError {
     Timeout { operation: String, timeout_ms: u64 },
 
     /// System error
-    #[error("Audio system error: {operation}")]
+    #[error("Audio system error: {operation} - {details}")]
     SystemError {
         operation: String,
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
+        details: String,
     },
 }
 
