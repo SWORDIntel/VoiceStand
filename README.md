@@ -66,13 +66,13 @@ With Intel Meteor Lake NPU acceleration, all models benefit from:
 #### Intel Core Ultra (Meteor Lake) - Optimal Performance
 ```bash
 # Recommended for development/testing
-./voice-to-text --download-model base
+cd rust && ./build.sh  # Select 'base' model
 
 # Recommended for professional use
-./voice-to-text --download-model small
+cd rust && ./build.sh  # Select 'small' model
 
 # Recommended for maximum accuracy
-./voice-to-text --download-model medium
+cd rust && ./build.sh  # Select 'medium' model
 ```
 
 #### Intel Systems with 8GB+ RAM
@@ -89,7 +89,8 @@ With Intel Meteor Lake NPU acceleration, all models benefit from:
 
 #### 🧑‍💻 **Developer/Tester**
 ```bash
-./voice-to-text --download-model tiny
+cd rust && cargo build --release
+../model_manager.sh download tiny
 ```
 - **Why**: Fastest download and startup
 - **Performance**: <1ms inference on NPU
@@ -97,9 +98,10 @@ With Intel Meteor Lake NPU acceleration, all models benefit from:
 
 #### 👔 **Professional User**
 ```bash
-./voice-to-text --download-model base  # Default
+cd rust && cargo build --release
+../model_manager.sh download base  # Default
 # or for higher accuracy:
-./voice-to-text --download-model small
+../model_manager.sh download small
 ```
 - **Why**: Best balance of speed and accuracy
 - **Performance**: <2-3ms inference on NPU
@@ -107,7 +109,8 @@ With Intel Meteor Lake NPU acceleration, all models benefit from:
 
 #### 🎯 **Power User**
 ```bash
-./voice-to-text --download-model medium
+cd rust && cargo build --release
+../model_manager.sh download medium
 ```
 - **Why**: High accuracy with acceptable latency
 - **Performance**: <5ms inference on NPU
@@ -115,7 +118,8 @@ With Intel Meteor Lake NPU acceleration, all models benefit from:
 
 #### 🏢 **Enterprise/Research**
 ```bash
-./voice-to-text --download-model large
+cd rust && cargo build --release
+../model_manager.sh download large
 ```
 - **Why**: Maximum accuracy for critical applications
 - **Performance**: <8ms inference on NPU
@@ -126,7 +130,7 @@ With Intel Meteor Lake NPU acceleration, all models benefit from:
 #### Interactive Setup (Recommended)
 ```bash
 # First time setup with guided model selection
-./build.sh
+cd rust && ./build.sh
 
 # Or use the dedicated model manager
 ./model_manager.sh setup
@@ -137,17 +141,10 @@ The build script will detect your hardware and recommend the optimal model.
 ```bash
 # Using the dedicated model manager (recommended)
 ./model_manager.sh download base       # Download specific model
-./model_manager.sh list               # List all models with status
-./model_manager.sh validate small     # Validate model integrity
-./model_manager.sh cleanup            # Remove corrupted models
-./model_manager.sh recommend          # Get hardware-based recommendation
-
-# Using the main application
-./voice-to-text --download-model <model-size>
-./voice-to-text --switch-model small
-./voice-to-text --list-models
-./voice-to-text --model-info
-./voice-to-text --hardware-check
+./model_manager.sh list                # List all models with status
+./model_manager.sh validate small      # Validate model integrity
+./model_manager.sh cleanup             # Remove corrupted models
+./model_manager.sh recommend           # Get hardware-based recommendation
 ```
 
 #### Model Storage
@@ -191,23 +188,25 @@ The build script will detect your hardware and recommend the optimal model.
 # Check internet connection
 ping huggingface.co
 
-# Retry with verbose output
-./voice-to-text --download-model base --verbose
+# Retry with model manager
+./model_manager.sh download base
 
 # Manual download
 wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+mv ggml-base.bin ~/.config/voice-to-text/models/
 ```
 
 #### Performance Issues
 ```bash
-# Check hardware acceleration
-./voice-to-text --hardware-check
+# Check system resources
+free -h
+lscpu | grep -E "Model name|Thread|Core"
 
 # Fallback to smaller model
-./voice-to-text --switch-model tiny
+./model_manager.sh download tiny
 
-# Check system resources
-./voice-to-text --system-info
+# Run with debug logging
+cd rust && RUST_LOG=debug cargo run --release
 ```
 
 #### Memory Issues
@@ -216,10 +215,10 @@ wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 free -h
 
 # Use smaller model
-./voice-to-text --download-model tiny
+./model_manager.sh download tiny
 
-# Enable memory optimization
-./voice-to-text --config memory.aggressive_cleanup=true
+# Monitor memory usage
+cd rust && heaptrack cargo run --release
 ```
 
 ### Advanced Configuration
@@ -379,7 +378,7 @@ VoiceStand supports multiple Whisper model sizes optimized for different use cas
 #### 🧑‍💻 **Developer/Tester**
 ```bash
 # Quick setup for testing mouse buttons and functionality
-./build.sh  # Will prompt for model selection
+cd rust && ./build.sh  # Will prompt for model selection
 # Recommended: tiny or base model
 ```
 - **Why**: Fast download, quick startup, minimal resources
@@ -390,7 +389,7 @@ VoiceStand supports multiple Whisper model sizes optimized for different use cas
 #### 👔 **Professional User**
 ```bash
 # Balanced performance for daily use
-./build.sh  # Select base or small model
+cd rust && ./build.sh  # Select base or small model
 ```
 - **Why**: Excellent accuracy-to-speed ratio
 - **NPU Performance**: <2-3ms inference
@@ -399,7 +398,7 @@ VoiceStand supports multiple Whisper model sizes optimized for different use cas
 #### 🎯 **Content Creator/Power User**
 ```bash
 # High accuracy for content creation
-./build.sh  # Select medium model
+cd rust && ./build.sh  # Select medium model
 ```
 - **Why**: High accuracy with acceptable performance
 - **NPU Performance**: <5ms inference
@@ -408,7 +407,7 @@ VoiceStand supports multiple Whisper model sizes optimized for different use cas
 #### 🏢 **Enterprise/Research**
 ```bash
 # Maximum accuracy for critical applications
-./build.sh  # Select large model
+cd rust && ./build.sh  # Select large model
 ```
 - **Why**: Highest possible accuracy
 - **NPU Performance**: <8ms inference
@@ -440,43 +439,39 @@ VoiceStand supports multiple Whisper model sizes optimized for different use cas
 ### Building from Source
 ```bash
 # Initial setup with interactive model selection
-./build.sh
+cd rust && ./build.sh
 
 # Development build with debug symbols
-cd build && make
+cd rust && cargo build
 
 # Release build with optimizations
-cd build && make -j$(nproc)
+cd rust && cargo build --release
 
 # Model management
 ./model_manager.sh setup          # Interactive model setup
 ./model_manager.sh download base   # Download specific model
-./model_manager.sh list           # List model status
-
-# Build mouse button discovery tool
-./build_mouse_monitor.sh
+./model_manager.sh list            # List model status
 
 # Run tests
-cargo test --all  # Rust tests
-cd build && make test  # C++ tests
+cd rust && cargo test --all
 
 # Run benchmarks
-cargo bench
+cd rust && cargo bench
 
 # Check for issues
-cargo clippy -- -D warnings
+cd rust && cargo clippy -- -D warnings
 ```
 
 ### Mouse Button Configuration
 
 #### Discover Your Mouse Buttons
+Mouse button discovery is integrated into the Rust application:
 ```bash
-# Build and run the discovery tool
-./build_mouse_monitor.sh
-./mouse-button-monitor
+cd rust && cargo run --release -- --discover-mouse
 
-# Press all your mouse buttons to see their numbers
-# The tool will show exact binding strings to use
+# Or use the GUI settings panel
+cargo run --release
+# Navigate to Settings > Input > Mouse Configuration
 ```
 
 #### Example Configuration
@@ -511,20 +506,19 @@ rust/
 ### Testing
 ```bash
 # Unit tests
-cargo test --lib
+cd rust && cargo test --lib
 
 # Integration tests
-cargo test --test integration_tests
+cd rust && cargo test --test integration_tests
 
 # Hardware tests (requires NPU/GNA)
-cargo test --test hardware_tests
+cd rust && cargo test --test hardware_tests
 
-# Mouse button tests
-cd build && make test-mouse-buttons
-./test-mouse-buttons
+# All workspace tests
+cd rust && cargo test --workspace
 
 # Performance benchmarks
-cargo bench --all
+cd rust && cargo bench --all
 ```
 
 ## 📊 Technical Deep Dive
@@ -597,7 +591,7 @@ cargo bench --all
 ### Pull Request Process
 1. Create feature branch from `main`
 2. Implement changes with tests
-3. Run full validation: `./validate_deployment.sh`
+3. Run full validation: `cd rust && ./validate_deployment.sh`
 4. Submit PR with detailed description
 
 ## 📄 License
