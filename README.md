@@ -11,17 +11,42 @@ VoiceStand is a production-ready, memory-safe voice-to-text system built in Rust
 
 **⚡ Quick Build:** Works on any Linux system with CPU fallback. Intel NPU/GNA acceleration optional.
 
+**UI stack:** Native GTK4 desktop interface (lightweight, no web/react frontend dependency).
+
+## 🧠 Adaptive Cross-System Speech Stack (Refactor)
+
+The speech subsystem now includes a runtime-adaptive path to run efficiently on different operating systems and hardware profiles:
+- **Runtime detection** for OS/architecture/core count with conservative GPU probing (CUDA/Metal).
+- **Resource-aware config optimization** to minimize threads/token/beam usage on low-resource systems.
+- **Self-calibration phase** (3+ seconds of user audio) that creates a persistent `voice_profile.json`.
+- **Online self-learning** that continuously refines gain/noise/VAD profile from high-confidence transcriptions.
+
+This allows consistent transcription behavior across heterogeneous systems while keeping CPU/RAM usage bounded by default.
+
 ## 🚀 Quick Start
 
-### Prerequisites
-- **Hardware**: Intel Core Ultra (Meteor Lake) with NPU/GNA support (optional - CPU fallback available)
-- **OS**: Linux with ALSA/PulseAudio or PipeWire
-- **Rust**: 1.70+ (1.89+ recommended)
-- **Build Tools**: gcc, pkg-config, make
+### Prerequisites (Ultra-Needed vs Optional)
+
+**Ultra-Needed (required on every system):**
+- **Rust toolchain**: Rust 1.70+ (1.89+ recommended)
+- **Build tooling**: `gcc`, `make`, `pkg-config`
+- **Audio stack headers**: platform audio development headers (ALSA on Linux, CoreAudio on macOS, WASAPI bindings on Windows)
+- **At least one Whisper model file** in `~/.config/voice-to-text/models/` or configured model path
+
+**Optional (for acceleration / higher throughput):**
+- Intel NPU/GNA/OpenVINO, CUDA GPU, or Metal-capable Apple Silicon/AMD GPU
+- 8GB+ RAM for medium/large models, 16GB+ recommended for `large`
 
 ### Installation
 
+#### 0. Validate Prerequisites (Recommended)
+```bash
+cd rust
+./check_prereqs.sh
+```
+
 #### 1. Install System Dependencies
+If `cargo check` fails on Linux with `alsa.pc` missing, install your distro ALSA development package first.
 ```bash
 # Debian/Ubuntu
 sudo apt-get update
