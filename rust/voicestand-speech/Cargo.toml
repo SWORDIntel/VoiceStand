@@ -21,4 +21,6 @@ tracing.workspace = true
 crossbeam-channel.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+directories.workspace = true
 regex = "1.10"

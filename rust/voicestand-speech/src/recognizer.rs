@@ -1,13 +1,17 @@
-use crate::{WhisperModel, MelSpectrogramExtractor, features};
+use crate::{
+    features, AdaptiveVoiceLearner, CalibrationSession, MelSpectrogramExtractor,
+    VoiceCalibrationProfile, WhisperModel,
+};
 use voicestand_core::{
-    SpeechConfig, AudioData, TranscriptionResult, AppEvent, Result, VoiceStandError
+    AppEvent, AudioData, Result, SpeechConfig, TranscriptionResult, VoiceStandError,
 };
 
-use candle_core::{Tensor, Device, DType};
+use candle_core::{DType, Device, Tensor};
 use crossbeam_channel::Sender;
 use parking_lot::Mutex;
-use std::sync::Arc;
 use std::collections::VecDeque;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{Duration, Instant};
 
 /// Memory-safe speech recognition engine using Candle
@@ -19,6 +23,8 @@ pub struct SpeechRecognizer {
     audio_buffer: Arc<Mutex<VecDeque<f32>>>,
     is_processing: Arc<Mutex<bool>>,
     last_transcription: Arc<Mutex<Option<TranscriptionResult>>>,
+    adaptive_learner: Arc<Mutex<AdaptiveVoiceLearner>>,
+    decode_temperature: f32,
 }
 
 impl SpeechRecognizer {
@@ -29,12 +35,14 @@ impl SpeechRecognizer {
 
         // Initialize feature extractor with Whisper parameters
         let feature_extractor = MelSpectrogramExtractor::new(
-            16000,  // Whisper expects 16kHz
-            400,    // n_fft
-            160,    // hop_length
-            80,     // n_mels
+            16000, // Whisper expects 16kHz
+            400,   // n_fft
+            160,   // hop_length
+            80,    // n_mels
             device,
         )?;
+
+        let calibration_profile = VoiceCalibrationProfile::load_or_default()?;
 
         Ok(Self {
             model: Arc::new(Mutex::new(model)),
@@ -44,6 +52,8 @@ impl SpeechRecognizer {
             audio_buffer: Arc::new(Mutex::new(VecDeque::new())),
             is_processing: Arc::new(Mutex::new(false)),
             last_transcription: Arc::new(Mutex::new(None)),
+            adaptive_learner: Arc::new(Mutex::new(AdaptiveVoiceLearner::new(calibration_profile))),
+            decode_temperature: 0.2,
         })
     }
 
@@ -83,9 +93,12 @@ impl SpeechRecognizer {
                         &is_processing,
                         &event_sender,
                         &config,
-                    ).await {
+                    )
+                    .await
+                    {
                         tracing::error!("Audio processing error: {}", e);
-                        let _ = event_sender.send(AppEvent::Error(format!("Recognition error: {}", e)));
+                        let _ =
+                            event_sender.send(AppEvent::Error(format!("Recognition error: {}", e)));
                     }
                     processing_timer = Instant::now();
                 }
@@ -124,7 +137,8 @@ impl SpeechRecognizer {
         }
 
         let audio_samples: Vec<f32> = self.audio_buffer.lock().drain(..).collect();
-        if audio_samples.len() < 1600 { // Less than 100ms at 16kHz
+        if audio_samples.len() < 1600 {
+            // Less than 100ms at 16kHz
             return Ok(());
         }
 
@@ -137,7 +151,8 @@ impl SpeechRecognizer {
         match result {
             Ok(Some(transcription)) => {
                 *self.last_transcription.lock() = Some(transcription.clone());
-                self.event_sender.send(AppEvent::TranscriptionReceived(transcription))
+                self.event_sender
+                    .send(AppEvent::TranscriptionReceived(transcription))
                     .map_err(|_| VoiceStandError::speech("Failed to send transcription event"))?;
             }
             Ok(None) => {
@@ -145,7 +160,8 @@ impl SpeechRecognizer {
             }
             Err(e) => {
                 tracing::error!("Recognition failed: {}", e);
-                self.event_sender.send(AppEvent::Error(format!("Recognition error: {}", e)))
+                self.event_sender
+                    .send(AppEvent::Error(format!("Recognition error: {}", e)))
                     .map_err(|_| VoiceStandError::speech("Failed to send error event"))?;
             }
         }
@@ -161,6 +177,9 @@ impl SpeechRecognizer {
         let max_samples = 16000 * 30; // 30 seconds at 16kHz
         let mut normalized_audio = features::pad_or_trim(audio, max_samples);
         features::normalize_audio(&mut normalized_audio);
+        self.adaptive_learner
+            .lock()
+            .normalized_for_profile(&mut normalized_audio);
 
         // Extract mel-spectrogram features
         let mel_features = self.feature_extractor.extract(&normalized_audio)?;
@@ -184,11 +203,25 @@ impl SpeechRecognizer {
             return Ok(None);
         }
 
+        {
+            let mut learner = self.adaptive_learner.lock();
+            learner.update_from_audio(audio, transcription.confidence);
+            if learner.profile().samples_seen % 25 == 0 {
+                if let Err(err) = learner.profile().save() {
+                    tracing::warn!("Failed to persist adaptive profile: {}", err);
+                }
+            }
+        }
+
         Ok(Some(transcription))
     }
 
     /// Run model inference
-    async fn run_inference(&self, model: &WhisperModel, mel_features: &Tensor) -> Result<TranscriptionResult> {
+    async fn run_inference(
+        &self,
+        model: &WhisperModel,
+        mel_features: &Tensor,
+    ) -> Result<TranscriptionResult> {
         // Encode audio features
         let audio_features = model.encode(mel_features)?;
 
@@ -204,19 +237,16 @@ impl SpeechRecognizer {
 
         // Decode tokens iteratively
         for _ in 0..max_tokens {
-            let token_tensor = Tensor::from_slice(
-                &tokens,
-                (1, tokens.len()),
-                model.device(),
-            )?;
+            let token_tensor = Tensor::from_slice(&tokens, (1, tokens.len()), model.device())?;
 
             let logits = model.decode(&token_tensor, &audio_features)?;
 
             // Get next token (simplified - real implementation would use proper sampling)
-            let next_token = self.sample_token(&logits)?;
+            let next_token = self.sample_token(&logits, 5)?;
 
             // Check for end token
-            if next_token == 50257 { // <|endoftext|>
+            if next_token == 50257 {
+                // <|endoftext|>
                 break;
             }
 
@@ -230,30 +260,64 @@ impl SpeechRecognizer {
         // Clean up text
         let cleaned_text = self.postprocess_text(&output_text);
 
+        let confidence = self.estimate_confidence(&tokens, max_tokens);
+
         Ok(TranscriptionResult::new(
             cleaned_text,
-            0.85, // Simplified confidence score
-            0.0,  // Start time
+            confidence,                           // Estimated confidence score
+            0.0,                                  // Start time
             audio_features.dim(1)? as f64 * 0.02, // Approximate duration
-            true, // Final result
+            true,                                 // Final result
         ))
     }
 
-    /// Sample next token from logits (simplified)
-    fn sample_token(&self, logits: &Tensor) -> Result<u32> {
-        // Get the last timestep logits
+    /// Sample next token from logits using top-k temperature sampling.
+    fn sample_token(&self, logits: &Tensor, top_k: usize) -> Result<u32> {
         let last_logits = logits.get(0)?.get(logits.dim(1)? - 1)?;
-
-        // Find argmax (greedy decoding)
         let logits_vec = last_logits.to_vec1::<f32>()?;
-        let max_idx = logits_vec
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(idx, _)| idx)
-            .unwrap_or(0);
 
-        Ok(max_idx as u32)
+        let mut ranked: Vec<(usize, f32)> = logits_vec.into_iter().enumerate().collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let top = &ranked[..top_k.min(ranked.len()).max(1)];
+
+        let temperature = self.decode_temperature.max(0.05);
+        let weights: Vec<f32> = top
+            .iter()
+            .map(|(_, logit)| (logit / temperature).exp())
+            .collect();
+        let weight_sum: f32 = weights.iter().sum::<f32>().max(1e-9);
+
+        // lightweight stochastic selector without external RNG dependency
+        let tick = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.subsec_nanos() as f32)
+            .unwrap_or(0.0);
+        let selector = (tick % 10_000.0) / 10_000.0 * weight_sum;
+
+        let mut running = 0.0;
+        for ((idx, _), weight) in top.iter().zip(weights.iter()) {
+            running += *weight;
+            if running >= selector {
+                return Ok(*idx as u32);
+            }
+        }
+
+        Ok(top[0].0 as u32)
+    }
+
+    fn estimate_confidence(&self, generated_tokens: &[u32], max_tokens: usize) -> f32 {
+        if generated_tokens.is_empty() || max_tokens == 0 {
+            return 0.35;
+        }
+
+        let length_factor = (generated_tokens.len() as f32 / max_tokens as f32).clamp(0.0, 1.0);
+        let eos_bonus = if generated_tokens.iter().any(|&t| t == 50257) {
+            0.1
+        } else {
+            0.0
+        };
+
+        (0.45 + length_factor * 0.45 + eos_bonus).clamp(0.1, 0.99)
     }
 
     /// Post-process transcribed text
@@ -327,8 +391,8 @@ impl SpeechRecognizer {
             // Simplified processing for streaming
             if chunk.iter().map(|&x| x.abs()).sum::<f32>() / chunk.len() as f32 > 0.01 {
                 Some(TranscriptionResult::new(
-                    "Processing...".to_string(),
-                    0.5,
+                    format!("listening ({})...", config.language),
+                    0.6,
                     0.0,
                     1.0,
                     false, // Partial result
@@ -336,7 +400,8 @@ impl SpeechRecognizer {
             } else {
                 None
             }
-        }).await;
+        })
+        .await;
 
         *is_processing.lock() = false;
 
@@ -362,6 +427,32 @@ impl SpeechRecognizer {
         self.audio_buffer.lock().clear();
     }
 
+    /// Run a self-calibration phase using several seconds of user speech samples.
+    pub fn calibrate_voice_profile(
+        &self,
+        calibration_audio: &[f32],
+    ) -> Result<VoiceCalibrationProfile> {
+        let mut session = CalibrationSession::default();
+        session.ingest(calibration_audio);
+
+        if !session.is_ready() {
+            return Err(VoiceStandError::speech(
+                "Calibration requires at least 3 seconds of speech audio",
+            ));
+        }
+
+        let profile = session.finish();
+        profile.save()?;
+
+        *self.adaptive_learner.lock() = AdaptiveVoiceLearner::new(profile.clone());
+        Ok(profile)
+    }
+
+    /// Return active user voice profile learned from calibration + online updates.
+    pub fn voice_profile(&self) -> VoiceCalibrationProfile {
+        self.adaptive_learner.lock().profile().clone()
+    }
+
     /// Update configuration
     pub fn update_config(&mut self, config: SpeechConfig) -> Result<()> {
         self.config = config;
@@ -378,7 +469,8 @@ impl Clone for MelSpectrogramExtractor {
             self.hop_length,
             self.n_mels,
             self.device.clone(),
-        ).expect("Recognizer should create successfully")
+        )
+        .expect("Recognizer should create successfully")
     }
 }
 
@@ -405,7 +497,9 @@ mod tests {
 
         if let Ok(recognizer) = SpeechRecognizer::new(config, sender) {
             let audio = vec![1.0, 2.0, 3.0, 4.0];
-            let resampled = recognizer.resample_audio(&audio, 8000, 16000).expect("Audio resampling should succeed");
+            let resampled = recognizer
+                .resample_audio(&audio, 8000, 16000)
+                .expect("Audio resampling should succeed");
             assert!(resampled.len() > audio.len());
         }
     }

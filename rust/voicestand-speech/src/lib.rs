@@ -2,16 +2,18 @@ pub mod recognizer;
 pub mod model;
 pub mod postprocess;
 pub mod features;
+pub mod adaptive;
 
 pub use recognizer::*;
 pub use model::*;
 pub use postprocess::*;
 pub use features::*;
+pub use adaptive::*;
 
 use voicestand_core::{Result, VoiceStandError, SpeechConfig};
 
-/// Initialize speech recognition subsystem
-pub async fn initialize_speech(config: &SpeechConfig) -> Result<()> {
+/// Initialize speech recognition subsystem with runtime-aware defaults.
+pub async fn initialize_speech(config: &SpeechConfig) -> Result<SpeechConfig> {
     tracing::info!("Initializing speech recognition subsystem");
 
     // Check if model file exists
@@ -22,15 +24,23 @@ pub async fn initialize_speech(config: &SpeechConfig) -> Result<()> {
         ));
     }
 
-    // Initialize Candle device
-    let device = candle_core::Device::new_cuda(0)
-        .or_else(|_| candle_core::Device::new_metal(0))
-        .unwrap_or(candle_core::Device::Cpu);
+    let runtime = RuntimeProfile::detect();
+    let optimized_config = runtime.optimize_config(config.clone());
 
+    // Initialize Candle device
+    let device = if optimized_config.use_gpu {
+        candle_core::Device::new_cuda(0)
+            .or_else(|_| candle_core::Device::new_metal(0))
+            .unwrap_or(candle_core::Device::Cpu)
+    } else {
+        candle_core::Device::Cpu
+    };
+
+    tracing::info!("Runtime profile: {:?}", runtime);
     tracing::info!("Using device: {:?}", device);
 
     tracing::info!("Speech recognition subsystem initialized successfully");
-    Ok(())
+    Ok(optimized_config)
 }
 
 /// Get available speech recognition models
