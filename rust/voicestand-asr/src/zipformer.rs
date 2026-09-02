@@ -8,13 +8,14 @@ use voicestand_types::{Result, VoiceStandError};
 use crate::Transcript;
 
 const SAMPLE_RATE: i32 = 16_000;
-const FINAL_PADDING_SAMPLES: usize = 12_800;
+const DEFAULT_FINAL_PADDING_MS: usize = 400;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SherpaZipformerConfig {
     pub model_dir: PathBuf,
     pub thread_count: usize,
     pub use_int8: bool,
+    pub final_padding_ms: usize,
 }
 
 impl SherpaZipformerConfig {
@@ -23,6 +24,7 @@ impl SherpaZipformerConfig {
             model_dir: model_dir.into(),
             thread_count: 2,
             use_int8: true,
+            final_padding_ms: DEFAULT_FINAL_PADDING_MS,
         }
     }
 
@@ -58,6 +60,11 @@ impl SherpaZipformerConfig {
                 "Zipformer thread count must be at least one",
             ));
         }
+        if self.final_padding_ms == 0 || self.final_padding_ms > 2_000 {
+            return Err(VoiceStandError::config(
+                "Zipformer final padding must be between 1 and 2000 milliseconds",
+            ));
+        }
         for path in [self.encoder(), self.decoder(), self.joiner(), self.tokens()] {
             if !path.is_file() {
                 return Err(VoiceStandError::model_load_failed(format!(
@@ -78,6 +85,7 @@ impl SherpaZipformerConfig {
 
 pub struct SherpaZipformerBackend {
     recognizer: Arc<OnlineRecognizer>,
+    final_padding_samples: usize,
 }
 
 impl SherpaZipformerBackend {
@@ -105,6 +113,7 @@ impl SherpaZipformerBackend {
         })?;
         Ok(Self {
             recognizer: Arc::new(recognizer),
+            final_padding_samples: config.final_padding_ms * SAMPLE_RATE as usize / 1_000,
         })
     }
 
@@ -118,6 +127,7 @@ impl SherpaZipformerBackend {
             last_emitted: String::new(),
             active_segment: None,
             finished: false,
+            final_padding_samples: self.final_padding_samples,
         }
     }
 }
@@ -132,6 +142,7 @@ pub struct SherpaOnlineSession {
     last_emitted: String,
     active_segment: Option<i32>,
     finished: bool,
+    final_padding_samples: usize,
 }
 
 impl SherpaOnlineSession {
@@ -155,8 +166,8 @@ impl SherpaOnlineSession {
             ));
         }
         self.finished = true;
-        self.stream
-            .accept_waveform(SAMPLE_RATE, &[0.0; FINAL_PADDING_SAMPLES]);
+        let padding = vec![0.0; self.final_padding_samples];
+        self.stream.accept_waveform(SAMPLE_RATE, &padding);
         self.stream.input_finished();
         self.decode_ready();
         self.changed_result(true)
@@ -261,5 +272,15 @@ mod tests {
         .err()
         .expect("missing model should fail");
         assert!(error.to_string().contains("artifact is missing"));
+    }
+
+    #[test]
+    fn rejects_invalid_final_padding_before_model_loading() {
+        let mut config = SherpaZipformerConfig::new("missing-model");
+        config.final_padding_ms = 0;
+        let error = SherpaZipformerBackend::load(&config)
+            .err()
+            .expect("invalid padding must fail");
+        assert!(error.to_string().contains("final padding"));
     }
 }

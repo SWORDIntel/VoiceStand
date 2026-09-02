@@ -51,7 +51,7 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<()> {
     let mut args = env::args_os().skip(1);
-    let usage = "usage: streaming_ptt_benchmark MODEL_DIR WAV [ITERATIONS] [CHUNK_MS] [REFERENCE]";
+    let usage = "usage: streaming_ptt_benchmark MODEL_DIR WAV [ITERATIONS] [CHUNK_MS] [REFERENCE] [FINAL_PADDING_MS]";
     let model_dir = PathBuf::from(args.next().ok_or_else(|| VoiceStandError::config(usage))?);
     let wav_path = PathBuf::from(args.next().ok_or_else(|| VoiceStandError::config(usage))?);
     let iterations = parse_arg(args.next(), "iterations", 5usize)?;
@@ -59,6 +59,7 @@ async fn run() -> Result<()> {
     let reference = args
         .next()
         .map(|value| value.to_string_lossy().into_owned());
+    let final_padding_ms = parse_arg(args.next(), "final padding milliseconds", 400usize)?;
     if iterations == 0 || chunk_ms == 0 {
         return Err(VoiceStandError::config(
             "iterations and chunk milliseconds must be positive",
@@ -71,6 +72,7 @@ async fn run() -> Result<()> {
         AsrRuntime::from_loaded_backend(Box::new(UnusedFallback), DecodeOptions::default())?;
     let mut model_config = SherpaZipformerConfig::new(&model_dir);
     model_config.thread_count = 2;
+    model_config.final_padding_ms = final_padding_ms;
     let load_started = Instant::now();
     let streaming = StreamingAsrRuntime::load(&model_config)?;
     let model_load_ms = load_started.elapsed().as_secs_f64() * 1_000.0;
@@ -119,6 +121,7 @@ async fn run() -> Result<()> {
             "wav": wav_path,
             "iterations": iterations,
             "chunk_ms": chunk_ms,
+            "final_padding_ms": final_padding_ms,
             "audio_seconds": audio.len() as f64 / SAMPLE_RATE as f64,
             "model_load_ms": model_load_ms,
             "first_partial_ms": summary(&first_partial_ms),

@@ -90,4 +90,4 @@ X11 and XWayland are the implemented activation and text-insertion path. Native 
 5. Complete a live microphone/output soak in addition to deterministic tests.
 6. Add native Wayland/input-method support or clearly constrain the release to X11/XWayland.
 
-The release-mode offline orchestration harness now drives audio processing, PTT assembly, streaming workers, partial events, and final publication. On the five-run JFK sample it measured first-partial p50/p95 of 648/932 ms and release-to-final p50/p95 of 227/761 ms. The release median passes, while p95 remains 61 ms above the 700 ms gate.
+The release-mode offline orchestration harness now drives audio processing, PTT assembly, streaming workers, partial events, and final publication. Reducing final synthetic silence from 800 ms to 400 ms preserved all three corpus transcripts. On ten JFK runs it measured first-partial p50/p95 of 415/794 ms and release-to-final p50/p95 of 57/157 ms. Release p95 now passes the 700 ms gate with substantial margin; live desktop acceptance remains.

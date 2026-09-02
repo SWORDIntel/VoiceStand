@@ -14,7 +14,7 @@
 | 1. Real CPU ASR | Complete | `whisper.cpp` backend, real model loading, WAV smoke test, cancellation, metrics. |
 | 2. Real PTT | Implemented, acceptance pending | X11/XWayland hold and toggle bindings drive capture; manual desktop validation remains. |
 | 3. Real text insertion | Implemented, acceptance pending | `TextSink` plus focused-window `xdotool` backend; browser/editor/terminal matrix remains. |
-| 4. Streaming UX | In progress, p95 release gate narrowly failing | Complete release-mode orchestration on JFK: first partial p50/p95 648/932 ms; release-to-final p50/p95 227/761 ms. Median passes, but p95 exceeds the 700 ms target by 61 ms. |
+| 4. Streaming UX | Release latency gate passing; live acceptance pending | With 400 ms final padding, ten complete release-mode JFK runs measured first-partial p50/p95 415/794 ms and release-to-final p50/p95 57/157 ms. All transcripts were stable at 4.55% WER. |
 | 5. Backend benchmark | Corpus harness implemented; broader accuracy pending | The release harness drives the real audio pipeline and PTT lifecycle, reports percentiles and WER, and caught/fixed a release-only missing-pre-roll bug. Fixed references cover all three current WAV fixtures. |
 | 6. Robustness | In progress | Deterministic 500-session PTT/ASR soak and stale-decode cancellation pass; device/session recovery, suspend/resume, and fault injection remain. |
 | 7. Packaging / UX | In progress | Verified archive, user-local installer, desktop file, optional autostart, and model installer implemented; tray/setup UI remains. |
@@ -52,7 +52,7 @@ The GitHub Actions job invokes this same script. A local green run does not clai
 ## Immediate next work
 
 1. Run the manual X11 acceptance matrix in browser, editor, and terminal fields.
-2. Reduce release-to-final p95 below 700 ms and expand the reference corpus beyond three fixtures.
+2. Expand the reference corpus beyond three fixtures and validate the same latency envelope with live microphone input.
 3. Add audio-device loss/recovery and suspend/resume fault tests.
 4. Implement native Wayland/input-method backend selection.
 5. Run a live microphone and desktop-output soak in addition to the deterministic 500-session test.
