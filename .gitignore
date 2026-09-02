@@ -2,6 +2,7 @@
 build/
 cmake-build-*/
 out/
+dist/
 
 # Model files (large binaries)
 models/
@@ -55,6 +56,7 @@ config.json
 *.mp3
 *.m4a
 *.flac
+!benchmarks/corpus/*.wav
 
 # Session data
 sessions/

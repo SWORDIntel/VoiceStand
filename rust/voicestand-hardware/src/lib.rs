@@ -8,16 +8,16 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-pub mod npu;
-pub mod gna;
-pub mod ffi;
 pub mod error;
+pub mod ffi;
+pub mod gna;
+pub mod npu;
 pub mod performance;
 
 pub use error::{HardwareError, HardwareResult};
-pub use npu::{NPUDevice, NPUHandle, NPUProcessor};
 pub use gna::{GNADevice, GNAHandle, WakeWordDetector};
-pub use performance::{PerformanceMonitor, HardwareMetrics};
+pub use npu::{NPUDevice, NPUHandle, NPUProcessor};
+pub use performance::{HardwareMetrics, PerformanceMonitor};
 
 /// Hardware resource management trait
 ///
@@ -107,7 +107,8 @@ impl HardwareManager {
             return Err(HardwareError::NotInitialized);
         }
 
-        let npu_device = self.npu_device
+        let npu_device = self
+            .npu_device
             .as_ref()
             .ok_or(HardwareError::NPUNotAvailable)?;
 
@@ -125,7 +126,8 @@ impl HardwareManager {
             return Err(HardwareError::NotInitialized);
         }
 
-        let gna_device = self.gna_device
+        let gna_device = self
+            .gna_device
             .as_ref()
             .ok_or(HardwareError::GNANotAvailable)?;
 
@@ -251,17 +253,17 @@ pub struct HealthStatus {
 impl HealthStatus {
     /// Check if system can perform voice-to-text
     pub fn can_transcribe(&self) -> bool {
-        self.npu_healthy || self.npu_available  // NPU or CPU fallback
+        self.npu_healthy || self.npu_available // NPU or CPU fallback
     }
 
     /// Check if system can detect wake words
     pub fn can_wake_word_detect(&self) -> bool {
-        self.gna_healthy  // GNA required for wake word detection
+        self.gna_healthy // GNA required for wake word detection
     }
 
     /// Check if push-to-talk is available
     pub fn can_push_to_talk(&self) -> bool {
-        true  // Always available via keyboard
+        true // Always available via keyboard
     }
 
     /// Get capability summary string

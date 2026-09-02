@@ -1,7 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput, BenchmarkId};
-use voicestand_core::{AppState, VoiceStandConfig, AppEvent};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use voicestand_core::{AppEvent, AppState, VoiceStandConfig};
 
 // Benchmark the core AppState operations
 fn benchmark_app_state(c: &mut Criterion) {
@@ -123,7 +123,9 @@ fn benchmark_audio_processing(c: &mut Criterion) {
 
     group.bench_function("gain_iterator_16k", |b| {
         b.iter(|| {
-            samples_16k.iter_mut().for_each(|sample| *sample *= black_box(0.8));
+            samples_16k
+                .iter_mut()
+                .for_each(|sample| *sample *= black_box(0.8));
         })
     });
 
@@ -184,13 +186,15 @@ fn benchmark_lock_contention(c: &mut Criterion) {
         let data = Arc::clone(&shared_data);
         b.iter(|| {
             // Simulate brief contention
-            let handles: Vec<_> = (0..4).map(|_| {
-                let data_clone = Arc::clone(&data);
-                std::thread::spawn(move || {
-                    let mut guard = data_clone.lock();
-                    *guard += 1;
+            let handles: Vec<_> = (0..4)
+                .map(|_| {
+                    let data_clone = Arc::clone(&data);
+                    std::thread::spawn(move || {
+                        let mut guard = data_clone.lock();
+                        *guard += 1;
+                    })
                 })
-            }).collect();
+                .collect();
 
             for handle in handles {
                 handle.join().unwrap();
@@ -240,10 +244,8 @@ fn benchmark_cpu_features(c: &mut Criterion) {
     // AVX2 benchmark (if available)
     if is_x86_feature_detected!("avx2") {
         group.bench_function("avx2_multiply", |b| {
-            b.iter(|| {
-                unsafe {
-                    avx2_multiply(&mut data, black_box(0.8));
-                }
+            b.iter(|| unsafe {
+                avx2_multiply(&mut data, black_box(0.8));
             })
         });
     }

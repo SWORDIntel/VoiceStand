@@ -1,9 +1,14 @@
-use crate::{VoiceActivityDetector, VADResult};
 use crate::buffer::StreamingBuffer;
-use voicestand_types::{AudioConfig, AudioData, AudioCaptureConfig, AudioDevice, Result, VoiceStandError, AppEvent};
+use crate::{VADResult, VoiceActivityDetector};
+use voicestand_types::{
+    AppEvent, AudioCaptureConfig, AudioConfig, AudioData, AudioDevice, Result, VoiceStandError,
+};
 
-use cpal::{Device, Stream, StreamConfig, SampleFormat, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::{
+    Device, FromSample, Sample, SampleFormat, SampleRate, SizedSample, Stream, StreamConfig,
+    SupportedStreamConfig,
+};
 use crossbeam_channel::Sender;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -12,6 +17,7 @@ use std::time::SystemTime;
 /// Memory-safe audio capture system using CPAL
 pub struct AudioCapture {
     device: Option<Device>,
+    input_config: Option<SupportedStreamConfig>,
     stream: Option<Stream>,
     config: AudioConfig,
     event_sender: Sender<AppEvent>,
@@ -26,8 +32,8 @@ impl AudioCapture {
             energy_threshold: config.vad_threshold,
             sample_rate: config.sample_rate,
             frame_size: config.frames_per_buffer as usize,
-            silence_duration_ms: 500,  // 500ms of silence to end speech
-            voice_duration_ms: 100,    // 100ms of voice to start speech
+            silence_duration_ms: 500, // 500ms of silence to end speech
+            voice_duration_ms: 100,   // 100ms of voice to start speech
         };
         let vad = Arc::new(Mutex::new(VoiceActivityDetector::new(vad_config)));
         let streaming_buffer = Arc::new(Mutex::new(StreamingBuffer::new(
@@ -37,6 +43,7 @@ impl AudioCapture {
 
         Ok(Self {
             device: None,
+            input_config: None,
             stream: None,
             config,
             event_sender,
@@ -59,81 +66,57 @@ impl AudioCapture {
         };
 
         // Get supported config
-        let supported_configs = device.supported_input_configs()
-            .map_err(|e| VoiceStandError::audio(format!("Failed to get supported configs: {}", e)))?;
+        let supported_configs = device.supported_input_configs().map_err(|e| {
+            VoiceStandError::audio(format!("Failed to get supported configs: {}", e))
+        })?;
 
         let supported_config = supported_configs
             .filter(|config| config.channels() == self.config.channels)
             .find(|config| {
-                config.min_sample_rate() <= SampleRate(self.config.sample_rate) &&
-                config.max_sample_rate() >= SampleRate(self.config.sample_rate)
+                config.min_sample_rate() <= SampleRate(self.config.sample_rate)
+                    && config.max_sample_rate() >= SampleRate(self.config.sample_rate)
             })
+            .map(|config| config.with_sample_rate(SampleRate(self.config.sample_rate)))
+            .or_else(|| device.default_input_config().ok())
             .ok_or_else(|| VoiceStandError::audio("No supported audio configuration found"))?;
-
-        let stream_config = StreamConfig {
-            channels: self.config.channels,
-            sample_rate: SampleRate(self.config.sample_rate),
-            buffer_size: cpal::BufferSize::Fixed(self.config.frames_per_buffer),
-        };
 
         tracing::info!(
             "Initializing audio capture: {} channels, {} Hz, {} frames",
-            stream_config.channels,
-            stream_config.sample_rate.0,
+            supported_config.channels(),
+            supported_config.sample_rate().0,
             self.config.frames_per_buffer
         );
 
         self.device = Some(device);
+        self.input_config = Some(supported_config);
 
         Ok(())
     }
 
     /// Start audio capture
     pub fn start(&mut self) -> Result<()> {
-        let device = self.device.as_ref()
+        let device = self
+            .device
+            .as_ref()
             .ok_or_else(|| VoiceStandError::audio("Device not initialized"))?;
 
-        let stream_config = StreamConfig {
-            channels: self.config.channels,
-            sample_rate: SampleRate(self.config.sample_rate),
-            buffer_size: cpal::BufferSize::Fixed(self.config.frames_per_buffer),
-        };
+        let input_config = self
+            .input_config
+            .as_ref()
+            .ok_or_else(|| VoiceStandError::audio("Input configuration unavailable"))?;
+        let stream_config = input_config.config();
+        let stream = match input_config.sample_format() {
+            SampleFormat::F32 => self.build_stream::<f32>(device, &stream_config),
+            SampleFormat::I16 => self.build_stream::<i16>(device, &stream_config),
+            SampleFormat::U16 => self.build_stream::<u16>(device, &stream_config),
+            format => Err(VoiceStandError::audio(format!(
+                "Unsupported input sample format: {format}"
+            ))),
+        }?;
 
-        // Create stream with proper error handling
-        let event_sender_data = self.event_sender.clone();
-        let event_sender_error = self.event_sender.clone();
-        let vad = Arc::clone(&self.vad);
-        let streaming_buffer = Arc::clone(&self.streaming_buffer);
-        let is_recording = Arc::clone(&self.is_recording);
-
-        let stream = device.build_input_stream(
-            &stream_config,
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                if !*is_recording.lock() {
-                    return;
-                }
-
-                // Process audio data safely
-                if let Err(e) = Self::process_audio_data(
-                    data,
-                    &event_sender_data,
-                    &vad,
-                    &streaming_buffer,
-                    stream_config.sample_rate.0,
-                    stream_config.channels,
-                ) {
-                    tracing::error!("Audio processing error: {}", e);
-                    let _ = event_sender_data.send(AppEvent::Error(format!("Audio processing error: {}", e)));
-                }
-            },
-            move |err| {
-                tracing::error!("Audio stream error: {}", err);
-                let _ = event_sender_error.send(AppEvent::Error(format!("Audio stream error: {}", err)));
-            },
-            None,
-        ).map_err(|e| VoiceStandError::audio(format!("Failed to build input stream: {}", e)))?;
-
-        stream.play().map_err(|e| VoiceStandError::audio(format!("Failed to start stream: {}", e)))?;
+        stream
+            .play()
+            .map_err(|e| VoiceStandError::audio(format!("Failed to start stream: {}", e)))?;
 
         self.stream = Some(stream);
         *self.is_recording.lock() = true;
@@ -142,12 +125,61 @@ impl AudioCapture {
         Ok(())
     }
 
+    fn build_stream<T>(&self, device: &Device, stream_config: &StreamConfig) -> Result<Stream>
+    where
+        T: Sample + SizedSample,
+        f32: FromSample<T>,
+    {
+        let event_sender_data = self.event_sender.clone();
+        let event_sender_error = self.event_sender.clone();
+        let vad = Arc::clone(&self.vad);
+        let streaming_buffer = Arc::clone(&self.streaming_buffer);
+        let is_recording = Arc::clone(&self.is_recording);
+        let source_rate = stream_config.sample_rate.0;
+        let source_channels = stream_config.channels;
+        let target_rate = self.config.sample_rate;
+
+        device
+            .build_input_stream(
+                stream_config,
+                move |data: &[T], _| {
+                    if !*is_recording.lock() {
+                        return;
+                    }
+                    let native: Vec<f32> = data.iter().copied().map(f32::from_sample).collect();
+                    let normalized =
+                        crate::normalize_audio(&native, source_rate, source_channels, target_rate);
+                    if let Err(error) = Self::process_audio_data(
+                        &normalized,
+                        &event_sender_data,
+                        &vad,
+                        &streaming_buffer,
+                        target_rate,
+                        1,
+                    ) {
+                        let _ = event_sender_data
+                            .send(AppEvent::Error(format!("Audio processing error: {error}")));
+                    }
+                },
+                move |error| {
+                    let _ = event_sender_error
+                        .send(AppEvent::Error(format!("Audio stream error: {error}")));
+                },
+                None,
+            )
+            .map_err(|error| {
+                VoiceStandError::audio(format!("Failed to build input stream: {error}"))
+            })
+    }
+
     /// Stop audio capture
     pub fn stop(&mut self) -> Result<()> {
         *self.is_recording.lock() = false;
 
         if let Some(stream) = self.stream.take() {
-            stream.pause().map_err(|e| VoiceStandError::audio(format!("Failed to stop stream: {}", e)))?;
+            stream
+                .pause()
+                .map_err(|e| VoiceStandError::audio(format!("Failed to stop stream: {}", e)))?;
         }
 
         // Clear buffers
@@ -164,21 +196,28 @@ impl AudioCapture {
     }
 
     /// Update VAD parameters
-    pub fn update_vad_parameters(&self, threshold: f32, min_speech_frames: u32, min_silence_frames: u32) {
-        self.vad.lock().update_parameters(threshold, min_speech_frames, min_silence_frames);
+    pub fn update_vad_parameters(
+        &self,
+        threshold: f32,
+        min_speech_frames: u32,
+        min_silence_frames: u32,
+    ) {
+        self.vad
+            .lock()
+            .update_parameters(threshold, min_speech_frames, min_silence_frames);
     }
 
     /// Get audio device information
     pub fn get_device_info(&self) -> Option<String> {
-        self.device.as_ref()
-            .and_then(|device| device.name().ok())
+        self.device.as_ref().and_then(|device| device.name().ok())
     }
 
     /// Find device by name
     fn find_device_by_name(&self, host: &cpal::Host, name: &str) -> Result<Device> {
-        for device in host.input_devices()
-            .map_err(|e| VoiceStandError::audio(format!("Failed to enumerate devices: {}", e)))? {
-
+        for device in host
+            .input_devices()
+            .map_err(|e| VoiceStandError::audio(format!("Failed to enumerate devices: {}", e)))?
+        {
             if let Ok(device_name) = device.name() {
                 if device_name == name {
                     return Ok(device);
@@ -186,7 +225,10 @@ impl AudioCapture {
             }
         }
 
-        Err(VoiceStandError::audio(format!("Device '{}' not found", name)))
+        Err(VoiceStandError::audio(format!(
+            "Device '{}' not found",
+            name
+        )))
     }
 
     /// Process incoming audio data (static method for use in callback)
@@ -202,7 +244,9 @@ impl AudioCapture {
         streaming_buffer.lock().push(data)?;
 
         // Process with VAD
-        let vad_result = vad.lock().process(data)
+        let vad_result = vad
+            .lock()
+            .process(data)
             .map_err(|e| VoiceStandError::audio(format!("VAD processing error: {}", e)))?;
 
         // Send speech detection events
@@ -211,12 +255,16 @@ impl AudioCapture {
                 is_start: vad_result.has_voice,
                 timestamp: SystemTime::now(),
             };
-            event_sender.send(event)
+            event_sender
+                .send(event)
                 .map_err(|_| VoiceStandError::audio("Failed to send speech detection event"))?;
         }
 
         // Create AudioData and send if speech is detected or buffer is ready
-        if vad_result.has_voice || streaming_buffer.lock().stats().available_samples >= sample_rate as usize {
+        if vad_result.has_voice
+            || vad_result.state_changed
+            || streaming_buffer.lock().stats().available_samples >= sample_rate as usize
+        {
             let audio_data = AudioData {
                 samples: data.to_vec(),
                 sample_rate,
@@ -225,7 +273,8 @@ impl AudioCapture {
                 is_speech_end: !vad_result.has_voice && vad_result.state_changed,
             };
 
-            event_sender.send(AppEvent::AudioDataReceived(audio_data))
+            event_sender
+                .send(AppEvent::AudioDataReceived(audio_data))
                 .map_err(|_| VoiceStandError::audio("Failed to send audio data event"))?;
         }
 

@@ -11,15 +11,19 @@ use tracing::{debug, error, info, warn};
 
 pub mod buffer;
 pub mod capture;
-pub mod processing;
-pub mod vad;
+pub mod normalize;
 pub mod pipeline;
+pub mod processing;
+pub mod utterance;
+pub mod vad;
 
-pub use buffer::{CircularBuffer};
+pub use buffer::CircularBuffer;
 pub use capture::AudioCapture;
-pub use processing::{AudioProcessor, AudioStats};
-pub use vad::{VoiceActivityDetector, VADConfig, VADResult};
+pub use normalize::normalize_audio;
 pub use pipeline::{AudioPipeline, PipelineConfig, PipelineEvent};
+pub use processing::{AudioProcessor, AudioStats};
+pub use utterance::UtteranceAssembler;
+pub use vad::{VADConfig, VADResult, VoiceActivityDetector};
 
 // Re-export types from voicestand-types for compatibility
 pub use voicestand_types::{AudioCaptureConfig, AudioDevice};
@@ -69,10 +73,7 @@ pub enum AudioError {
 
     /// System error
     #[error("Audio system error: {operation} - {details}")]
-    SystemError {
-        operation: String,
-        details: String,
-    },
+    SystemError { operation: String, details: String },
 }
 
 /// Audio operation result type
@@ -102,8 +103,8 @@ pub struct AudioConfig {
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
-            sample_rate: 16000,      // 16kHz for speech
-            channels: 1,             // Mono
+            sample_rate: 16000, // 16kHz for speech
+            channels: 1,        // Mono
             format: AudioFormat::F32,
             buffer_size: 480,        // 30ms at 16kHz
             target_latency_ms: 10.0, // <10ms target
@@ -259,7 +260,9 @@ impl<T: AudioSample> AudioFrame<T> {
 
     /// Check if frame contains silence
     pub fn is_silence(&self, threshold: f32) -> bool {
-        self.samples.iter().all(|&sample| sample.is_silence(threshold))
+        self.samples
+            .iter()
+            .all(|&sample| sample.is_silence(threshold))
     }
 
     /// Convert to f32 format
@@ -287,7 +290,8 @@ impl<T: AudioSample> AudioFrame<T> {
             return 0.0;
         }
 
-        let sum_squares: f32 = self.samples
+        let sum_squares: f32 = self
+            .samples
             .iter()
             .map(|&s| {
                 let f = s.to_f32();
@@ -322,7 +326,8 @@ impl<T: AudioSample> AudioFrame<T> {
         }
 
         for (self_sample, &other_sample) in self.samples.iter_mut().zip(&other.samples) {
-            let mixed = self_sample.to_f32() * (1.0 - mix_ratio) + other_sample.to_f32() * mix_ratio;
+            let mixed =
+                self_sample.to_f32() * (1.0 - mix_ratio) + other_sample.to_f32() * mix_ratio;
             *self_sample = T::from_f32(mixed);
         }
 
@@ -426,7 +431,8 @@ impl AudioMetrics {
     pub fn is_healthy(&self) -> bool {
         self.average_latency_ms <= 10.0 // <10ms latency target
             && self.buffer_usage_percent < 90.0 // Buffer not too full
-            && (self.buffer_underruns + self.buffer_overruns) < self.frames_processed / 1000 // <0.1% buffer issues
+            && (self.buffer_underruns + self.buffer_overruns) < self.frames_processed / 1000
+        // <0.1% buffer issues
     }
 
     /// Generate performance report
@@ -448,16 +454,32 @@ impl AudioMetrics {
             self.average_latency_ms,
             self.peak_latency_ms,
             self.buffer_underruns,
-            if self.frames_processed > 0 { self.buffer_underruns as f32 / self.frames_processed as f32 * 100.0 } else { 0.0 },
+            if self.frames_processed > 0 {
+                self.buffer_underruns as f32 / self.frames_processed as f32 * 100.0
+            } else {
+                0.0
+            },
             self.buffer_overruns,
-            if self.frames_processed > 0 { self.buffer_overruns as f32 / self.frames_processed as f32 * 100.0 } else { 0.0 },
+            if self.frames_processed > 0 {
+                self.buffer_overruns as f32 / self.frames_processed as f32 * 100.0
+            } else {
+                0.0
+            },
             self.dropped_frames,
-            if self.frames_processed > 0 { self.dropped_frames as f32 / self.frames_processed as f32 * 100.0 } else { 0.0 },
+            if self.frames_processed > 0 {
+                self.dropped_frames as f32 / self.frames_processed as f32 * 100.0
+            } else {
+                0.0
+            },
             self.buffer_usage_percent,
             self.vad_detection_rate * 100.0,
             self.average_noise_level,
             self.peak_noise_level,
-            if self.is_healthy() { "✅ HEALTHY" } else { "⚠️ ISSUES DETECTED" }
+            if self.is_healthy() {
+                "✅ HEALTHY"
+            } else {
+                "⚠️ ISSUES DETECTED"
+            }
         )
     }
 }
@@ -503,11 +525,7 @@ pub mod utils {
     }
 
     /// Apply simple high-pass filter
-    pub fn high_pass_filter<T: AudioSample>(
-        input: &mut [T],
-        cutoff_freq: f32,
-        sample_rate: u32,
-    ) {
+    pub fn high_pass_filter<T: AudioSample>(input: &mut [T], cutoff_freq: f32, sample_rate: u32) {
         if input.len() < 2 {
             return;
         }
@@ -531,11 +549,7 @@ pub mod utils {
     }
 
     /// Apply simple low-pass filter
-    pub fn low_pass_filter<T: AudioSample>(
-        input: &mut [T],
-        cutoff_freq: f32,
-        sample_rate: u32,
-    ) {
+    pub fn low_pass_filter<T: AudioSample>(input: &mut [T], cutoff_freq: f32, sample_rate: u32) {
         let rc = 1.0 / (2.0 * std::f32::consts::PI * cutoff_freq);
         let dt = 1.0 / sample_rate as f32;
         let alpha = dt / (rc + dt);
@@ -575,11 +589,7 @@ pub mod utils {
     }
 
     /// Apply automatic gain control
-    pub fn apply_agc<T: AudioSample>(
-        frame: &mut [T],
-        target_level: f32,
-        max_gain: f32,
-    ) -> f32 {
+    pub fn apply_agc<T: AudioSample>(frame: &mut [T], target_level: f32, max_gain: f32) -> f32 {
         let current_level = frame_energy(frame).sqrt();
 
         if current_level < 1e-6 {

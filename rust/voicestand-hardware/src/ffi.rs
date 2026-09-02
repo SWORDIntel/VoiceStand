@@ -245,9 +245,7 @@ pub mod gna_bindings {
         /// Safe wrapper for wake word model loading
         pub fn load_wake_word_safe(wake_word: &str) -> Option<*mut Self> {
             let c_wake_word = std::ffi::CString::new(wake_word).ok()?;
-            let ptr = unsafe {
-                gna_wake_word_model_load(c_wake_word.as_ptr(), wake_word.len())
-            };
+            let ptr = unsafe { gna_wake_word_model_load(c_wake_word.as_ptr(), wake_word.len()) };
             if ptr.is_null() {
                 None
             } else {

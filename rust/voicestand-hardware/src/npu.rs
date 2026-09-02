@@ -3,9 +3,9 @@
 //! Memory-safe wrapper for Intel Neural Processing Unit with RAII resource management.
 //! Provides <2ms voice-to-text inference with automatic fallback to CPU.
 
+use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Instant;
-use parking_lot::RwLock;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
 
@@ -34,8 +34,8 @@ pub struct NPUConfig {
 impl Default for NPUConfig {
     fn default() -> Self {
         Self {
-            max_inference_time_ms: 2.0,  // <2ms target
-            power_budget_mw: 100,        // <100mW target
+            max_inference_time_ms: 2.0, // <2ms target
+            power_budget_mw: 100,       // <100mW target
             precision: ModelPrecision::FP16,
             dynamic_shapes: true,
             max_concurrent_inferences: 4,
@@ -75,9 +75,7 @@ unsafe impl Sync for NPUHandle {}
 impl NPUHandle {
     /// Create new NPU handle
     fn new(device_id: u32) -> HardwareResult<Self> {
-        let device_ptr = unsafe {
-            npu_bindings::npu_device_create(device_id)
-        };
+        let device_ptr = unsafe { npu_bindings::npu_device_create(device_id) };
 
         if device_ptr.is_null() {
             return Err(HardwareError::init_failed(
@@ -98,9 +96,7 @@ impl NPUHandle {
             return false;
         }
 
-        unsafe {
-            npu_bindings::npu_device_is_operational(self.device_ptr)
-        }
+        unsafe { npu_bindings::npu_device_is_operational(self.device_ptr) }
     }
 
     /// Get device capabilities
@@ -110,9 +106,8 @@ impl NPUHandle {
         }
 
         let mut caps = npu_bindings::NPUCapabilities::default();
-        let result = unsafe {
-            npu_bindings::npu_device_get_capabilities(self.device_ptr, &mut caps)
-        };
+        let result =
+            unsafe { npu_bindings::npu_device_get_capabilities(self.device_ptr, &mut caps) };
 
         if result != 0 {
             return Err(HardwareError::driver_error(
@@ -176,7 +171,11 @@ impl ModelCache {
         }
     }
 
-    fn get_or_load(&mut self, model_path: &str, precision: ModelPrecision) -> HardwareResult<*mut npu_bindings::NPUModel> {
+    fn get_or_load(
+        &mut self,
+        model_path: &str,
+        precision: ModelPrecision,
+    ) -> HardwareResult<*mut npu_bindings::NPUModel> {
         let cache_key = format!("{}_{:?}", model_path, precision);
 
         // Check if model is already cached
@@ -187,10 +186,7 @@ impl ModelCache {
 
         // Load new model
         let model_ptr = unsafe {
-            npu_bindings::npu_model_load(
-                model_path.as_ptr() as *const i8,
-                precision as u32,
-            )
+            npu_bindings::npu_model_load(model_path.as_ptr() as *const i8, precision as u32)
         };
 
         if model_ptr.is_null() {
@@ -201,9 +197,7 @@ impl ModelCache {
         }
 
         // Get model size
-        let model_size_mb = unsafe {
-            npu_bindings::npu_model_get_size_mb(model_ptr)
-        };
+        let model_size_mb = unsafe { npu_bindings::npu_model_get_size_mb(model_ptr) };
 
         // Evict old models if necessary
         self.evict_if_needed(model_size_mb)?;
@@ -225,7 +219,8 @@ impl ModelCache {
     fn evict_if_needed(&mut self, needed_mb: u64) -> HardwareResult<()> {
         while self.current_size_mb + needed_mb > self.max_size_mb {
             // Find least recently used model
-            let lru_key = self.cache
+            let lru_key = self
+                .cache
                 .iter()
                 .min_by_key(|(_, model)| model.last_used)
                 .map(|(key, _)| key.clone());
@@ -246,7 +241,10 @@ impl ModelCache {
                 npu_bindings::npu_model_destroy(model.model_ptr);
             }
             self.current_size_mb -= model.size_mb;
-            debug!("Evicted NPU model from cache: {} ({} MB)", key, model.size_mb);
+            debug!(
+                "Evicted NPU model from cache: {} ({} MB)",
+                key, model.size_mb
+            );
         }
 
         Ok(())
@@ -380,13 +378,12 @@ impl NPUProcessor {
         let start_time = Instant::now();
 
         // Acquire inference slot (prevents overloading NPU)
-        let _permit = self.inference_semaphore
-            .acquire()
-            .await
-            .map_err(|_| HardwareError::concurrency_error(
+        let _permit = self.inference_semaphore.acquire().await.map_err(|_| {
+            HardwareError::concurrency_error(
                 "inference_semaphore",
                 "Failed to acquire inference permit",
-            ))?;
+            )
+        })?;
 
         // Get model from cache
         let model_ptr = {
@@ -485,7 +482,10 @@ impl NPUProcessor {
         })
     }
 
-    fn process_output(&self, output_ptr: *mut npu_bindings::NPUOutput) -> HardwareResult<ProcessedTranscription> {
+    fn process_output(
+        &self,
+        output_ptr: *mut npu_bindings::NPUOutput,
+    ) -> HardwareResult<ProcessedTranscription> {
         if output_ptr.is_null() {
             return Err(HardwareError::model_error(
                 "output_processing",
@@ -577,7 +577,10 @@ fn validate_config_against_capabilities(
     capabilities: &NPUCapabilities,
 ) -> HardwareResult<()> {
     // Check if precision is supported
-    if !capabilities.supported_precisions.contains(&config.precision) {
+    if !capabilities
+        .supported_precisions
+        .contains(&config.precision)
+    {
         return Err(HardwareError::config_error(
             "precision",
             format!("Precision {:?} not supported by NPU", config.precision),
@@ -590,8 +593,7 @@ fn validate_config_against_capabilities(
             "max_concurrent_inferences",
             format!(
                 "Requested {} concurrent inferences exceeds NPU limit of {}",
-                config.max_concurrent_inferences,
-                capabilities.max_concurrent_inferences
+                config.max_concurrent_inferences, capabilities.max_concurrent_inferences
             ),
         ));
     }

@@ -201,7 +201,13 @@ pub struct AudioDevice {
 }
 
 impl AudioDevice {
-    pub fn new(name: String, index: u32, channels: u16, sample_rate: u32, is_default: bool) -> Self {
+    pub fn new(
+        name: String,
+        index: u32,
+        channels: u16,
+        sample_rate: u32,
+        is_default: bool,
+    ) -> Self {
         Self {
             name,
             index,
@@ -234,7 +240,8 @@ impl AudioData {
     }
 
     pub fn duration(&self) -> Duration {
-        let duration_secs = self.samples.len() as f64 / (self.sample_rate as f64 * self.channels as f64);
+        let duration_secs =
+            self.samples.len() as f64 / (self.sample_rate as f64 * self.channels as f64);
         Duration::from_secs_f64(duration_secs)
     }
 
@@ -262,9 +269,9 @@ pub struct SpeechConfig {
 impl Default for SpeechConfig {
     fn default() -> Self {
         Self {
-            model_path: "models/ggml-base.bin".to_string(),
+            model_path: "models/ggml-tiny.en.bin".to_string(),
             language: "auto".to_string(),
-            num_threads: num_cpus::get(),
+            num_threads: num_cpus::get().clamp(1, 4),
             use_gpu: false,
             max_tokens: 512,
             beam_size: 5,
@@ -409,7 +416,10 @@ pub enum GuiEvent {
 
 impl AppEvent {
     pub fn is_audio_event(&self) -> bool {
-        matches!(self, AppEvent::AudioDataReceived(_) | AppEvent::SpeechDetected { .. })
+        matches!(
+            self,
+            AppEvent::AudioDataReceived(_) | AppEvent::SpeechDetected { .. }
+        )
     }
 
     pub fn is_transcription_event(&self) -> bool {

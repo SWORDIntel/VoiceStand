@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use parking_lot::Mutex;
+use std::collections::VecDeque;
 use voicestand_types::{Result, VoiceStandError};
 
 /// Thread-safe circular buffer for audio samples
@@ -126,22 +126,22 @@ impl StreamingBuffer {
         let mut chunk = vec![0.0; self.chunk_size];
         match self.buffer.read(&mut chunk) {
             Ok(bytes_read) if bytes_read == self.chunk_size => {
-            // Add overlap from previous chunk
-            if !self.last_chunk.is_empty() && self.overlap_size > 0 {
-                let overlap_start = self.last_chunk.len().saturating_sub(self.overlap_size);
-                let overlap_data = &self.last_chunk[overlap_start..];
+                // Add overlap from previous chunk
+                if !self.last_chunk.is_empty() && self.overlap_size > 0 {
+                    let overlap_start = self.last_chunk.len().saturating_sub(self.overlap_size);
+                    let overlap_data = &self.last_chunk[overlap_start..];
 
-                // Blend overlap
-                let blend_size = std::cmp::min(overlap_data.len(), chunk.len());
-                for i in 0..blend_size {
-                    chunk[i] = (chunk[i] + overlap_data[i]) * 0.5;
+                    // Blend overlap
+                    let blend_size = std::cmp::min(overlap_data.len(), chunk.len());
+                    for i in 0..blend_size {
+                        chunk[i] = (chunk[i] + overlap_data[i]) * 0.5;
+                    }
                 }
-            }
 
                 self.last_chunk = chunk.clone();
                 Some(chunk)
             }
-            Ok(_) => None, // Not enough bytes read
+            Ok(_) => None,  // Not enough bytes read
             Err(_) => None, // Read error
         }
     }
@@ -191,7 +191,12 @@ mod tests {
         assert_eq!(buffer.available(), 1);
 
         // Test overflow
-        assert_eq!(buffer.write(&[4, 5, 6, 7, 8, 9]).expect("Write should succeed"), 6);
+        assert_eq!(
+            buffer
+                .write(&[4, 5, 6, 7, 8, 9])
+                .expect("Write should succeed"),
+            6
+        );
         assert_eq!(buffer.overflow_count(), 2); // 2 items were dropped
     }
 
@@ -200,8 +205,12 @@ mod tests {
         let mut buffer = StreamingBuffer::new(4, 0.25); // 25% overlap = 1 sample
 
         // Add samples
-        buffer.push(&[1.0, 2.0, 3.0, 4.0]).expect("Push should succeed");
-        buffer.push(&[5.0, 6.0, 7.0, 8.0]).expect("Push should succeed");
+        buffer
+            .push(&[1.0, 2.0, 3.0, 4.0])
+            .expect("Push should succeed");
+        buffer
+            .push(&[5.0, 6.0, 7.0, 8.0])
+            .expect("Push should succeed");
 
         // Get first chunk
         let chunk1 = buffer.pop_chunk().expect("Should get first chunk");

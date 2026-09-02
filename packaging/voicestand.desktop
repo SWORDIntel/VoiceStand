@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=VoiceStand
+Comment=Local CPU-first voice-to-text
+Exec=voicestand
+Terminal=true
+Categories=AudioVideo;Audio;Utility;
+StartupNotify=false

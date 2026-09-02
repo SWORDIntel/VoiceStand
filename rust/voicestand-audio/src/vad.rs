@@ -86,8 +86,10 @@ impl VoiceActivityDetector {
 
         // Calculate frame counts from duration
         let frames_per_second = config.sample_rate as f32 / config.frame_size as f32;
-        state.min_speech_frames = ((config.voice_duration_ms as f32 / 1000.0) * frames_per_second) as u32;
-        state.min_silence_frames = ((config.silence_duration_ms as f32 / 1000.0) * frames_per_second) as u32;
+        state.min_speech_frames =
+            ((config.voice_duration_ms as f32 / 1000.0) * frames_per_second) as u32;
+        state.min_silence_frames =
+            ((config.silence_duration_ms as f32 / 1000.0) * frames_per_second) as u32;
 
         let window_size = (frames_per_second * 2.0) as usize; // 2 second history
 
@@ -135,16 +137,15 @@ impl VoiceActivityDetector {
         let centroid_indicates_speech = spectral_centroid > adaptive_centroid_threshold;
 
         // Combine indicators with weights
-        let speech_score = (
-            if energy_indicates_speech { 0.5 } else { 0.0 } +
-            if zcr_indicates_speech { 0.3 } else { 0.0 } +
-            if centroid_indicates_speech { 0.2 } else { 0.0 }
-        );
+        let speech_score = (if energy_indicates_speech { 0.5 } else { 0.0 }
+            + if zcr_indicates_speech { 0.3 } else { 0.0 }
+            + if centroid_indicates_speech { 0.2 } else { 0.0 });
 
         let is_speech = speech_score > 0.4; // Require at least 40% confidence
         let state_changed = self.state.update(energy);
 
-        let confidence = self.calculate_confidence(energy, zcr, spectral_centroid, adaptive_energy_threshold);
+        let confidence =
+            self.calculate_confidence(energy, zcr, spectral_centroid, adaptive_energy_threshold);
 
         Ok(VADResult {
             has_voice: self.state.is_speaking,
@@ -209,10 +210,14 @@ impl VoiceActivityDetector {
             return self.state.energy_threshold;
         }
 
-        let mean_energy: f32 = self.energy_history.iter().sum::<f32>() / self.energy_history.len() as f32;
-        let variance: f32 = self.energy_history.iter()
+        let mean_energy: f32 =
+            self.energy_history.iter().sum::<f32>() / self.energy_history.len() as f32;
+        let variance: f32 = self
+            .energy_history
+            .iter()
             .map(|&x| (x - mean_energy).powi(2))
-            .sum::<f32>() / self.energy_history.len() as f32;
+            .sum::<f32>()
+            / self.energy_history.len() as f32;
         let std_dev = variance.sqrt();
 
         // Adaptive threshold: mean + 2 * std_dev
@@ -235,13 +240,19 @@ impl VoiceActivityDetector {
             return 800.0; // Default threshold for voice frequency range
         }
 
-        let mean_centroid: f32 = self.spectral_centroid_history.iter().sum::<f32>() / self.spectral_centroid_history.len() as f32;
+        let mean_centroid: f32 = self.spectral_centroid_history.iter().sum::<f32>()
+            / self.spectral_centroid_history.len() as f32;
         mean_centroid.max(400.0) // Voice typically above 400Hz
     }
 
-
     /// Calculate confidence score
-    fn calculate_confidence(&self, energy: f32, zcr: f32, spectral_centroid: f32, energy_threshold: f32) -> f32 {
+    fn calculate_confidence(
+        &self,
+        energy: f32,
+        zcr: f32,
+        spectral_centroid: f32,
+        energy_threshold: f32,
+    ) -> f32 {
         let energy_confidence = if energy > energy_threshold {
             ((energy / energy_threshold) - 1.0).min(1.0).max(0.0)
         } else {
@@ -254,7 +265,8 @@ impl VoiceActivityDetector {
             1.0 - (zcr - optimal_zcr).abs() / optimal_zcr
         } else {
             0.0
-        }.max(0.0);
+        }
+        .max(0.0);
 
         let centroid_confidence = if spectral_centroid > 300.0 && spectral_centroid < 4000.0 {
             // Voice frequency range
@@ -262,7 +274,8 @@ impl VoiceActivityDetector {
             1.0 - (spectral_centroid - optimal_centroid).abs() / optimal_centroid
         } else {
             0.0
-        }.max(0.0);
+        }
+        .max(0.0);
 
         // Weighted average
         (energy_confidence * 0.5 + zcr_confidence * 0.3 + centroid_confidence * 0.2).min(1.0)
@@ -289,7 +302,12 @@ impl VoiceActivityDetector {
     }
 
     /// Update VAD parameters
-    pub fn update_parameters(&mut self, energy_threshold: f32, min_speech_frames: u32, min_silence_frames: u32) {
+    pub fn update_parameters(
+        &mut self,
+        energy_threshold: f32,
+        min_speech_frames: u32,
+        min_silence_frames: u32,
+    ) {
         self.state.energy_threshold = energy_threshold;
         self.state.min_speech_frames = min_speech_frames;
         self.state.min_silence_frames = min_silence_frames;
@@ -332,9 +350,7 @@ mod tests {
         assert!(result.energy_level < 0.01);
 
         // Speech-like samples
-        let speech_samples: Vec<f32> = (0..1024)
-            .map(|i| 0.5 * (i as f32 * 0.1).sin())
-            .collect();
+        let speech_samples: Vec<f32> = (0..1024).map(|i| 0.5 * (i as f32 * 0.1).sin()).collect();
         let result = vad.process(&speech_samples).unwrap();
         // Note: Might need several frames to detect speech
     }

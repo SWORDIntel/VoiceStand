@@ -1,9 +1,9 @@
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::collections::VecDeque;
-use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
 
 /// Performance monitoring system for VoiceStand
 pub struct PerformanceMonitor {
@@ -131,7 +131,9 @@ impl PerformanceMonitor {
             frames_per_second: self.calculate_frames_per_second(),
 
             // Memory stats
-            current_memory_mb: self.current_memory_usage.load(Ordering::Relaxed) as f64 / 1024.0 / 1024.0,
+            current_memory_mb: self.current_memory_usage.load(Ordering::Relaxed) as f64
+                / 1024.0
+                / 1024.0,
             peak_memory_mb: self.peak_memory_usage.load(Ordering::Relaxed) as f64 / 1024.0 / 1024.0,
             total_allocations: self.allocation_count.load(Ordering::Relaxed),
 
@@ -154,10 +156,11 @@ impl PerformanceMonitor {
 
         PerformanceTargetStatus {
             latency_target_met: stats.audio_latency_p95.as_millis() < 50, // <50ms target
-            memory_target_met: stats.peak_memory_mb < 100.0, // <100MB target
+            memory_target_met: stats.peak_memory_mb < 100.0,              // <100MB target
             error_rate_acceptable: {
                 let total_frames = stats.frames_per_second * stats.uptime.as_secs_f64();
-                let error_rate = (stats.buffer_overruns + stats.processing_errors) as f64 / total_frames.max(1.0);
+                let error_rate = (stats.buffer_overruns + stats.processing_errors) as f64
+                    / total_frames.max(1.0);
                 error_rate < 0.001 // <0.1% error rate
             },
             cpu_usage_acceptable: stats.cpu_usage_avg < 80.0, // <80% average CPU
@@ -167,13 +170,21 @@ impl PerformanceMonitor {
     fn calculate_samples_per_second(&self) -> f64 {
         let samples = self.samples_processed.load(Ordering::Relaxed) as f64;
         let elapsed = self.start_time.elapsed().as_secs_f64();
-        if elapsed > 0.0 { samples / elapsed } else { 0.0 }
+        if elapsed > 0.0 {
+            samples / elapsed
+        } else {
+            0.0
+        }
     }
 
     fn calculate_frames_per_second(&self) -> f64 {
         let frames = self.frames_processed.load(Ordering::Relaxed) as f64;
         let elapsed = self.start_time.elapsed().as_secs_f64();
-        if elapsed > 0.0 { frames / elapsed } else { 0.0 }
+        if elapsed > 0.0 {
+            frames / elapsed
+        } else {
+            0.0
+        }
     }
 
     /// Reset all counters (for testing)
@@ -232,9 +243,9 @@ pub struct PerformanceStats {
 impl PerformanceStats {
     /// Check if all performance targets are met
     pub fn meets_targets(&self) -> bool {
-        self.audio_latency_p95.as_millis() < 50 &&
-        self.peak_memory_mb < 100.0 &&
-        self.cpu_usage_avg < 80.0
+        self.audio_latency_p95.as_millis() < 50
+            && self.peak_memory_mb < 100.0
+            && self.cpu_usage_avg < 80.0
     }
 
     /// Generate performance report
@@ -279,7 +290,11 @@ impl PerformanceStats {
             self.buffer_overruns,
             self.processing_errors,
             self.uptime.as_secs_f64(),
-            if self.meets_targets() { "✅ PASSED" } else { "❌ FAILED" }
+            if self.meets_targets() {
+                "✅ PASSED"
+            } else {
+                "❌ FAILED"
+            }
         )
     }
 }
@@ -295,10 +310,10 @@ pub struct PerformanceTargetStatus {
 
 impl PerformanceTargetStatus {
     pub fn all_targets_met(&self) -> bool {
-        self.latency_target_met &&
-        self.memory_target_met &&
-        self.error_rate_acceptable &&
-        self.cpu_usage_acceptable
+        self.latency_target_met
+            && self.memory_target_met
+            && self.error_rate_acceptable
+            && self.cpu_usage_acceptable
     }
 }
 

@@ -2,11 +2,11 @@
 //!
 //! Comprehensive performance tracking for NPU and GNA operations with memory safety.
 
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -133,7 +133,7 @@ impl HardwareMetrics {
         let latency_ms = latency.as_secs_f32() * 1000.0;
 
         // Update running average
-        if self.total_operations == 0 {
+        if self.total_processing_time.is_zero() {
             self.average_latency_ms = latency_ms;
         } else {
             // Exponential moving average with alpha = 0.1
@@ -237,7 +237,8 @@ impl HardwareMetrics {
 
         // Merge all additional metrics from NPU
         for (key, value) in npu_metrics.additional_metrics {
-            self.additional_metrics.insert(format!("npu_{}", key), value);
+            self.additional_metrics
+                .insert(format!("npu_{}", key), value);
         }
 
         self.last_updated = SystemTime::now();
@@ -265,7 +266,8 @@ impl HardwareMetrics {
 
         // Merge all additional metrics from GNA
         for (key, value) in gna_metrics.additional_metrics {
-            self.additional_metrics.insert(format!("gna_{}", key), value);
+            self.additional_metrics
+                .insert(format!("gna_{}", key), value);
         }
 
         self.last_updated = SystemTime::now();
@@ -284,15 +286,27 @@ impl HardwareMetrics {
 
         report.push_str(&format!("=== {} Performance Report ===\n", self.component));
         report.push_str(&format!("Total Operations: {}\n", self.total_operations));
-        report.push_str(&format!("Average Latency: {:.2}ms\n", self.average_latency_ms));
+        report.push_str(&format!(
+            "Average Latency: {:.2}ms\n",
+            self.average_latency_ms
+        ));
         report.push_str(&format!("Peak Latency: {:.2}ms\n", self.peak_latency_ms));
         report.push_str(&format!("Min Latency: {:.2}ms\n", self.min_latency_ms));
         report.push_str(&format!("Throughput: {:.1} ops/sec\n", self.ops_per_second));
-        report.push_str(&format!("Success Rate: {:.1}%\n", self.success_rate * 100.0));
+        report.push_str(&format!(
+            "Success Rate: {:.1}%\n",
+            self.success_rate * 100.0
+        ));
         report.push_str(&format!("Error Count: {}\n", self.error_count));
         report.push_str(&format!("Memory Usage: {:.1} MB\n", self.memory_usage_mb));
-        report.push_str(&format!("Power Consumption: {:.1} mW\n", self.power_consumption_mw));
-        report.push_str(&format!("Targets Met: {}\n", if self.targets_met { "✅" } else { "❌" }));
+        report.push_str(&format!(
+            "Power Consumption: {:.1} mW\n",
+            self.power_consumption_mw
+        ));
+        report.push_str(&format!(
+            "Targets Met: {}\n",
+            if self.targets_met { "✅" } else { "❌" }
+        ));
 
         if !self.additional_metrics.is_empty() {
             report.push_str("\nAdditional Metrics:\n");
@@ -351,9 +365,10 @@ impl PerformanceTracker {
         metrics.add_metric("inference_time_ms", MetricValue::Duration(inference_time));
         metrics.add_metric("audio_samples", MetricValue::Integer(audio_samples as i64));
         metrics.add_metric("confidence", MetricValue::Float(confidence as f64));
-        metrics.add_metric("samples_per_ms", MetricValue::Float(
-            audio_samples as f64 / total_time.as_secs_f64() / 1000.0
-        ));
+        metrics.add_metric(
+            "samples_per_ms",
+            MetricValue::Float(audio_samples as f64 / total_time.as_secs_f64() / 1000.0),
+        );
 
         // Check NPU performance targets (<2ms inference)
         metrics.check_targets(2.0, 50.0); // 2ms latency, 50 inferences/sec
@@ -367,8 +382,14 @@ impl PerformanceTracker {
             success: true,
             additional_data: {
                 let mut data = HashMap::new();
-                data.insert("inference_time_ms".to_string(), MetricValue::Duration(inference_time));
-                data.insert("confidence".to_string(), MetricValue::Float(confidence as f64));
+                data.insert(
+                    "inference_time_ms".to_string(),
+                    MetricValue::Duration(inference_time),
+                );
+                data.insert(
+                    "confidence".to_string(),
+                    MetricValue::Float(confidence as f64),
+                );
                 data
             },
         });
@@ -408,8 +429,14 @@ impl PerformanceTracker {
             success: true,
             additional_data: {
                 let mut data = HashMap::new();
-                data.insert("detection_time_ms".to_string(), MetricValue::Duration(detection_time));
-                data.insert("confidence".to_string(), MetricValue::Float(confidence as f64));
+                data.insert(
+                    "detection_time_ms".to_string(),
+                    MetricValue::Duration(detection_time),
+                );
+                data.insert(
+                    "confidence".to_string(),
+                    MetricValue::Float(confidence as f64),
+                );
                 data.insert("power_mw".to_string(), MetricValue::Float(power_mw as f64));
                 data
             },
@@ -445,7 +472,10 @@ impl PerformanceTracker {
             history.remove(0);
         }
 
-        warn!("Performance tracker recorded error: {} - {}", operation_type, error);
+        warn!(
+            "Performance tracker recorded error: {} - {}",
+            operation_type, error
+        );
     }
 
     /// Get current metrics (thread-safe)
@@ -508,7 +538,10 @@ impl PerformanceTracker {
         let mut history = self.operation_history.write();
         history.clear();
 
-        info!("Performance tracker reset for component: {}", self.component);
+        info!(
+            "Performance tracker reset for component: {}",
+            self.component
+        );
     }
 }
 
@@ -559,7 +592,9 @@ pub struct PerformanceMonitor {
 #[derive(Debug)]
 enum MonitorCommand {
     Stop,
-    GetMetrics { response_tx: mpsc::Sender<HashMap<String, HardwareMetrics>> },
+    GetMetrics {
+        response_tx: mpsc::Sender<HashMap<String, HardwareMetrics>>,
+    },
 }
 
 impl PerformanceMonitor {
@@ -669,10 +704,12 @@ impl PerformanceMonitor {
 
             tx.send(MonitorCommand::GetMetrics { response_tx })
                 .await
-                .map_err(|_| HardwareError::concurrency_error(
-                    "monitor_command",
-                    "Failed to send metrics request",
-                ))?;
+                .map_err(|_| {
+                    HardwareError::concurrency_error(
+                        "monitor_command",
+                        "Failed to send metrics request",
+                    )
+                })?;
 
             if let Some(metrics_map) = response_rx.recv().await {
                 // Aggregate metrics from all components

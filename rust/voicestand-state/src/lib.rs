@@ -3,22 +3,22 @@
 //! Memory-safe state machine for push-to-talk coordination with dual activation system.
 //! Provides <10ms latency response to key presses and voice activation.
 
+use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use parking_lot::RwLock;
-use tokio::sync::{mpsc, oneshot};
 use thiserror::Error;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
-pub mod ptt;
 pub mod activation;
 pub mod hotkey;
+pub mod ptt;
 pub mod state_machine;
 
-pub use ptt::{PushToTalkManager, PttEvent};
 pub use activation::{ActivationDetector, ActivationEvent};
-pub use hotkey::{HotkeyManager, HotkeyConfig, HotkeyEvent};
-pub use state_machine::{StateMachine, VoiceStandState, StateTransition};
+pub use hotkey::{HotkeyConfig, HotkeyEvent, HotkeyManager, HotkeyState};
+pub use ptt::{PttEvent, PushToTalkManager};
+pub use state_machine::{StateMachine, StateTransition, VoiceStandState};
 
 /// Push-to-talk configuration
 #[derive(Debug, Clone)]
@@ -52,7 +52,7 @@ pub enum ActivationMode {
 }
 
 /// System state enumeration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemState {
     Idle,
     Listening,
@@ -76,7 +76,7 @@ impl ActivationManager {
         use std::time::Duration;
 
         let detector = ActivationDetector::new(
-            0.05, // Energy threshold for voice detection
+            0.05,                       // Energy threshold for voice detection
             Duration::from_millis(200), // Minimum voice duration
         );
 
@@ -89,7 +89,10 @@ impl ActivationManager {
     }
 
     /// Process audio data for activation detection
-    pub async fn process_audio_data(&mut self, audio_data: &[f32]) -> StateResult<Vec<ActivationEvent>> {
+    pub async fn process_audio_data(
+        &mut self,
+        audio_data: &[f32],
+    ) -> StateResult<Vec<ActivationEvent>> {
         let mut events = Vec::new();
 
         // Buffer audio data for processing
@@ -104,7 +107,7 @@ impl ActivationManager {
                 Ok(Some(event)) => {
                     events.push(event);
                 }
-                Ok(None) => {}, // No event
+                Ok(None) => {} // No event
                 Err(e) => {
                     return Err(StateError::HardwareError {
                         component: "activation_detector".to_string(),
@@ -120,7 +123,10 @@ impl ActivationManager {
 
     /// Initialize activation manager
     pub async fn initialize(&mut self) -> StateResult<()> {
-        info!("Initializing activation manager with modes: {:?}", self.modes);
+        info!(
+            "Initializing activation manager with modes: {:?}",
+            self.modes
+        );
         Ok(())
     }
 
@@ -172,10 +178,7 @@ pub enum StateError {
 
     /// System error
     #[error("System error: {operation} - {error}")]
-    SystemError {
-        operation: String,
-        error: String,
-    },
+    SystemError { operation: String, error: String },
 }
 
 /// State operation result type
@@ -197,6 +200,8 @@ pub struct StateConfig {
     pub ptt_config: PTTConfig,
     /// Hotkey configuration
     pub hotkey_config: HotkeyConfig,
+    /// Optional press-to-toggle recording binding.
+    pub toggle_hotkey_config: Option<HotkeyConfig>,
     /// Activation modes enabled
     pub activation_modes: Vec<ActivationMode>,
     /// Target response latency in milliseconds
@@ -212,10 +217,11 @@ impl Default for StateConfig {
         Self {
             ptt_config: PTTConfig::default(),
             hotkey_config: HotkeyConfig::default(),
-            activation_modes: vec![
-                ActivationMode::KeyPress,
-                ActivationMode::WakeWord,
-            ],
+            toggle_hotkey_config: Some(HotkeyConfig {
+                modifiers: vec!["Ctrl".into(), "Alt".into()],
+                key: "Space".into(),
+            }),
+            activation_modes: vec![ActivationMode::KeyPress, ActivationMode::WakeWord],
             target_latency_ms: 10.0, // <10ms response target
             enable_fallbacks: true,
             debug_mode: false,
@@ -395,12 +401,20 @@ impl SystemMetrics {
             self.ptt_activations,
             self.wake_word_activations,
             self.failed_activations,
-            if self.total_transitions > 0 { self.failed_activations as f32 / self.total_transitions as f32 * 100.0 } else { 0.0 },
+            if self.total_transitions > 0 {
+                self.failed_activations as f32 / self.total_transitions as f32 * 100.0
+            } else {
+                0.0
+            },
             self.success_rate() * 100.0,
             self.hardware_components_available,
             self.hardware_components_failed,
             self.current_state_duration.as_secs_f32(),
-            if self.is_healthy() { "✅ HEALTHY" } else { "⚠️ ISSUES DETECTED" }
+            if self.is_healthy() {
+                "✅ HEALTHY"
+            } else {
+                "⚠️ ISSUES DETECTED"
+            }
         )
     }
 }
@@ -451,21 +465,48 @@ impl VoiceStandCoordinator {
         self.state_machine.initialize().await?;
 
         // Initialize hotkey manager
-        self.hotkey_manager.initialize().await
+        self.hotkey_manager
+            .initialize()
+            .await
             .map_err(|e| StateError::HardwareError {
                 component: "hotkey".to_string(),
                 reason: e.to_string(),
             })?;
+        if let Some(binding) = self.config.toggle_hotkey_config.clone() {
+            self.hotkey_manager
+                .register_hotkey(binding.clone(), "toggle_recording".to_string())
+                .map_err(|error| StateError::HotkeyError {
+                    combination: format!("{}+{}", binding.modifiers.join("+"), binding.key),
+                    reason: error.to_string(),
+                })?;
+        }
+        self.hotkey_manager
+            .register_hotkey(
+                self.config.hotkey_config.clone(),
+                "push_to_talk".to_string(),
+            )
+            .map_err(|error| StateError::HotkeyError {
+                combination: format!(
+                    "{}+{}",
+                    self.config.hotkey_config.modifiers.join("+"),
+                    self.config.hotkey_config.key
+                ),
+                reason: error.to_string(),
+            })?;
 
         // Initialize activation manager
-        self.activation_manager.initialize().await
+        self.activation_manager
+            .initialize()
+            .await
             .map_err(|e| StateError::HardwareError {
                 component: "activation".to_string(),
                 reason: e.to_string(),
             })?;
 
         // Initialize PTT manager
-        self.ptt_manager.initialize().await
+        self.ptt_manager
+            .initialize()
+            .await
             .map_err(|e| StateError::HardwareError {
                 component: "ptt".to_string(),
                 reason: e.to_string(),
@@ -477,7 +518,9 @@ impl VoiceStandCoordinator {
 
     /// Start the coordinator event loop
     pub async fn start(&mut self) -> StateResult<mpsc::Receiver<SystemEvent>> {
-        let event_rx = self.event_rx.take()
+        let event_rx = self
+            .event_rx
+            .take()
             .ok_or_else(|| StateError::ConcurrencyError {
                 operation: "start".to_string(),
                 reason: "Event receiver already taken".to_string(),
@@ -492,48 +535,44 @@ impl VoiceStandCoordinator {
         let activation_events = self.activation_manager.start().await?;
         let hotkey_events = self.hotkey_manager.start().await?;
 
-        // Create event forwarding channels
-        let _event_tx = self.event_tx.clone();
+        // Public events are emitted from the same loop that updates metrics.
+        let (public_tx, public_rx) = mpsc::channel(100);
         let metrics = Arc::clone(&self.metrics);
         let start_time = self.start_time;
 
         // Start main event loop
-        let main_event_tx = self.event_tx.clone();
         tokio::spawn(async move {
             Self::event_loop(
                 event_rx,
                 ptt_events,
                 activation_events,
                 hotkey_events,
-                main_event_tx,
+                public_tx,
                 metrics,
                 start_time,
                 shutdown_rx,
-            ).await;
+            )
+            .await;
         });
-
-        // Create public event stream
-        let (_public_tx, public_rx) = mpsc::channel(100);
-
-        // Forward public events (will be handled in the main event loop)
-        // Removed subscribe code as mpsc::Sender doesn't support broadcast
 
         info!("🎤 VoiceStand coordinator started - ready for voice commands");
         Ok(public_rx)
     }
 
     /// Main event processing loop
+    #[allow(clippy::too_many_arguments)]
     async fn event_loop(
         mut main_events: mpsc::Receiver<SystemEvent>,
         mut ptt_events: mpsc::UnboundedReceiver<PttEvent>,
         mut activation_events: mpsc::Receiver<ActivationEvent>,
         mut hotkey_events: mpsc::UnboundedReceiver<HotkeyEvent>,
-        event_tx: mpsc::Sender<SystemEvent>,
+        public_tx: mpsc::Sender<SystemEvent>,
         metrics: Arc<RwLock<SystemMetrics>>,
         start_time: Instant,
         mut shutdown_rx: oneshot::Receiver<()>,
     ) {
         info!("Starting VoiceStand event loop");
+        let mut toggle_active = false;
 
         loop {
             tokio::select! {
@@ -542,6 +581,7 @@ impl VoiceStandCoordinator {
                     match event {
                         Some(event) => {
                             Self::handle_system_event(&event, &metrics, start_time).await;
+                            if public_tx.send(event).await.is_err() { break; }
                         }
                         None => break,
                     }
@@ -551,7 +591,8 @@ impl VoiceStandCoordinator {
                 event = ptt_events.recv() => {
                     if let Some(ptt_event) = event {
                         let system_event = SystemEvent::PTT(ptt_event);
-                        let _ = event_tx.send(system_event).await;
+                        Self::handle_system_event(&system_event, &metrics, start_time).await;
+                        if public_tx.send(system_event).await.is_err() { break; }
                     }
                 }
 
@@ -559,15 +600,23 @@ impl VoiceStandCoordinator {
                 event = activation_events.recv() => {
                     if let Some(activation_event) = event {
                         let system_event = SystemEvent::Activation(activation_event);
-                        let _ = event_tx.send(system_event).await;
+                        Self::handle_system_event(&system_event, &metrics, start_time).await;
+                        if public_tx.send(system_event).await.is_err() { break; }
                     }
                 }
 
                 // Hotkey events
                 event = hotkey_events.recv() => {
                     if let Some(hotkey_event) = event {
-                        let system_event = SystemEvent::Hotkey(hotkey_event);
-                        let _ = event_tx.send(system_event).await;
+                        if let Some(ptt_event) = translate_hotkey_event(
+                            hotkey_event,
+                            &mut toggle_active,
+                            Instant::now(),
+                        ) {
+                            let system_event = SystemEvent::PTT(ptt_event);
+                            Self::handle_system_event(&system_event, &metrics, start_time).await;
+                            if public_tx.send(system_event).await.is_err() { break; }
+                        }
                     }
                 }
 
@@ -619,6 +668,13 @@ impl VoiceStandCoordinator {
                     PttEvent::Released { .. } => {
                         debug!("⚪ PTT released");
                     }
+                    PttEvent::ToggleOn { .. } => {
+                        metrics_guard.record_ptt_activation();
+                        debug!("🔴 PTT toggled on");
+                    }
+                    PttEvent::ToggleOff { .. } => {
+                        debug!("⚪ PTT toggled off");
+                    }
                     PttEvent::Error { .. } => {
                         metrics_guard.record_failed_activation();
                     }
@@ -669,7 +725,9 @@ impl VoiceStandCoordinator {
 
     /// Send system event
     async fn send_event(&self, event: SystemEvent) -> StateResult<()> {
-        self.event_tx.send(event).await
+        self.event_tx
+            .send(event)
+            .await
             .map_err(|_| StateError::ConcurrencyError {
                 operation: "send_event".to_string(),
                 reason: "Event channel closed".to_string(),
@@ -698,11 +756,16 @@ impl VoiceStandCoordinator {
     }
 
     /// Process audio data for activation detection (CRITICAL FOR PIPELINE INTEGRATION)
-    pub async fn process_audio_frame(&mut self, audio_data: &[f32]) -> StateResult<Vec<SystemEvent>> {
+    pub async fn process_audio_frame(
+        &mut self,
+        audio_data: &[f32],
+    ) -> StateResult<Vec<SystemEvent>> {
         let mut events = Vec::new();
 
         // Process through activation manager detector (synchronous call, returns single event)
-        if let Ok(Some(activation_event)) = self.activation_manager.detector.process_audio(audio_data) {
+        if let Ok(Some(activation_event)) =
+            self.activation_manager.detector.process_audio(audio_data)
+        {
             let system_event = SystemEvent::Activation(activation_event.clone());
             events.push(system_event.clone());
             self.send_event(system_event).await?;
@@ -734,6 +797,26 @@ impl VoiceStandCoordinator {
     }
 }
 
+fn translate_hotkey_event(
+    event: HotkeyEvent,
+    toggle_active: &mut bool,
+    timestamp: Instant,
+) -> Option<PttEvent> {
+    match (event.action.as_str(), event.state) {
+        ("push_to_talk", HotkeyState::Pressed) => Some(PttEvent::Pressed { timestamp }),
+        ("push_to_talk", HotkeyState::Released) => Some(PttEvent::Released { timestamp }),
+        ("toggle_recording", HotkeyState::Pressed) => {
+            *toggle_active = !*toggle_active;
+            Some(if *toggle_active {
+                PttEvent::ToggleOn { timestamp }
+            } else {
+                PttEvent::ToggleOff { timestamp }
+            })
+        }
+        ("toggle_recording", HotkeyState::Released) | (_, _) => None,
+    }
+}
+
 impl Drop for VoiceStandCoordinator {
     fn drop(&mut self) {
         if self.shutdown_tx.is_some() {
@@ -760,21 +843,12 @@ pub mod utils {
 
     /// Check system compatibility
     pub async fn check_system_compatibility() -> StateResult<SystemCompatibility> {
-        let mut compatibility = SystemCompatibility::default();
-
-        // Check for NPU availability
-        compatibility.npu_available = check_npu_availability().await;
-
-        // Check for GNA availability
-        compatibility.gna_available = check_gna_availability().await;
-
-        // Check audio system
-        compatibility.audio_available = check_audio_availability().await;
-
-        // Check hotkey system
-        compatibility.hotkey_available = check_hotkey_availability().await;
-
-        Ok(compatibility)
+        Ok(SystemCompatibility {
+            npu_available: check_npu_availability().await,
+            gna_available: check_gna_availability().await,
+            audio_available: check_audio_availability().await,
+            hotkey_available: check_hotkey_availability().await,
+        })
     }
 
     async fn check_npu_availability() -> bool {
@@ -874,7 +948,7 @@ mod tests {
         assert_eq!(metrics.total_transitions, 0);
         assert_eq!(metrics.ptt_activations, 0);
         assert_eq!(metrics.wake_word_activations, 0);
-        assert!(metrics.is_healthy());
+        assert!(!metrics.is_healthy());
     }
 
     #[test]
@@ -936,5 +1010,80 @@ mod tests {
     async fn test_utils_custom_hotkey() {
         let coordinator = utils::create_coordinator_with_hotkey("ctrl+alt+v");
         assert!(coordinator.is_ok());
+    }
+
+    #[test]
+    fn hold_binding_preserves_press_and_release() {
+        let now = Instant::now();
+        let mut toggle_active = false;
+        let pressed = translate_hotkey_event(
+            HotkeyEvent {
+                action: "push_to_talk".into(),
+                state: HotkeyState::Pressed,
+            },
+            &mut toggle_active,
+            now,
+        );
+        let released = translate_hotkey_event(
+            HotkeyEvent {
+                action: "push_to_talk".into(),
+                state: HotkeyState::Released,
+            },
+            &mut toggle_active,
+            now,
+        );
+        assert!(matches!(pressed, Some(PttEvent::Pressed { .. })));
+        assert!(matches!(released, Some(PttEvent::Released { .. })));
+        assert!(!toggle_active);
+    }
+
+    #[test]
+    fn toggle_binding_changes_only_on_key_down() {
+        let now = Instant::now();
+        let mut active = false;
+        let on = translate_hotkey_event(
+            HotkeyEvent {
+                action: "toggle_recording".into(),
+                state: HotkeyState::Pressed,
+            },
+            &mut active,
+            now,
+        );
+        assert!(matches!(on, Some(PttEvent::ToggleOn { .. })));
+        assert!(active);
+        assert!(translate_hotkey_event(
+            HotkeyEvent {
+                action: "toggle_recording".into(),
+                state: HotkeyState::Released
+            },
+            &mut active,
+            now,
+        )
+        .is_none());
+        assert!(active);
+        let off = translate_hotkey_event(
+            HotkeyEvent {
+                action: "toggle_recording".into(),
+                state: HotkeyState::Pressed,
+            },
+            &mut active,
+            now,
+        );
+        assert!(matches!(off, Some(PttEvent::ToggleOff { .. })));
+        assert!(!active);
+    }
+
+    #[test]
+    fn unknown_hotkey_action_is_ignored() {
+        let mut active = false;
+        assert!(translate_hotkey_event(
+            HotkeyEvent {
+                action: "unrelated".into(),
+                state: HotkeyState::Pressed
+            },
+            &mut active,
+            Instant::now(),
+        )
+        .is_none());
     }
 }

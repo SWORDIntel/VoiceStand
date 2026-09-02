@@ -4,7 +4,7 @@
 
 VoiceStand is being redesigned as a lightweight Linux dictation utility: activate it with a button or hotkey, speak, and commit locally transcribed text into the currently focused application.
 
-> **Project status:** active architectural redesign. The current repository contains useful Rust audio/state infrastructure, but the end-to-end production path is not complete. In particular, real CPU ASR, Linux-wide activation, and focused-application text insertion are the immediate implementation priorities.
+> **Project status:** midpoint implementation. The X11/XWayland path now has real microphone capture, global hold/toggle activation, local whisper.cpp transcription, focused-window insertion, release packaging, and local CI. Whisper.cpp is retained as the correctness fallback but fails interactive latency on this host. A sherpa-onnx Zipformer candidate has passed the latency gate and is the next live backend to integrate. Manual desktop acceptance and recovery testing remain before production readiness.
 
 ## Direction
 
@@ -69,6 +69,57 @@ TYPE
                      └─────────────────────────┘
 ```
 
+## CPU quick start
+
+```bash
+sudo apt-get install -y build-essential pkg-config libasound2-dev curl xdotool
+./scripts/install-model.sh
+cd rust
+cargo build -p voicestand --release
+./target/release/voicestand --check
+./target/release/voicestand
+```
+
+The current installer downloads `ggml-tiny.en.bin` for the implemented whisper.cpp fallback, verifies its SHA-256 digest, and atomically installs it under the platform configuration directory. Set `VOICESTAND_MODEL_DIR` to override the installation directory. The streaming Zipformer installer/configuration will land with its Rust backend integration; it is not yet selected by the application.
+
+The first production desktop path uses X11/XWayland global hotkeys and focused-window text insertion. Hold `Ctrl+Alt+V`, speak, and release to finalize and insert the transcript, or press `Ctrl+Alt+Space` to toggle recording on and off. Native Wayland input-method support remains a planned backend; VoiceStand reports an explicit error instead of pretending global activation works when neither X11 nor XWayland is available.
+
+To validate real inference without a microphone:
+
+```bash
+./target/release/voicestand --smoke-test /path/to/16khz-mono.wav
+```
+
+To measure repeatable warm-decode latency and enforce an optional p95 gate:
+
+```bash
+cd rust
+cargo run --release -p voicestand-asr --example transcribe_wav -- \
+  MODEL WAV THREADS ITERATIONS MAX_P95_MS
+```
+
+The command performs one unmeasured warm-up, emits versioned JSON containing decode p50/p95, RTF p50/p95, samples, load time, and resident memory, and exits nonzero when the optional p95 limit is exceeded. Its latency scope is explicitly the warm decode component of release-to-final; it does not include focused-application insertion.
+
+To compare the three PTT release paths without spending hosted CI time:
+
+```bash
+cd rust
+cargo run --release -p voicestand-core --example release_path_benchmark -- \
+  /path/to/model.bin /path/to/16khz-mono.wav 4 1 1000
+```
+
+The final argument is the simulated uncovered tail in milliseconds (`1..=2000`). The JSON report separates exact-cache reuse, bounded overlapping-tail decoding, and full fallback latency and records whether word-overlap reconciliation succeeded.
+
+An optional second argument overrides the configured model path. The command prints the transcript and reports model-load time, decode time, real-time factor, and confidence.
+
+Before pushing CI changes, run the same gate used by GitHub Actions:
+
+```bash
+./scripts/ci-local.sh
+```
+
+The gate uses the committed lockfile, tests the complete workspace, applies strict linting to the production ASR, activation, and text-output boundaries, and builds the release executable. GitHub CI contains one parity job that calls this script directly and cancels superseded runs.
+
 ## Architecture Rules
 
 ### CPU is normal operation
@@ -96,10 +147,10 @@ trait SpeechBackend {
 }
 ```
 
-Initial candidates:
+Measured backend roles at this midpoint:
 
-- [`whisper.cpp`](https://github.com/ggml-org/whisper.cpp) — first CPU production backend to integrate and benchmark.
-- [`sherpa-onnx`](https://github.com/k2-fsa/sherpa-onnx) — streaming/INT8 alternative to benchmark empirically.
+- [`whisper.cpp`](https://github.com/ggml-org/whisper.cpp) — implemented offline/fallback backend. The tiny.en warm decode measured 20.8 s for an 11 s JFK fixture (RTF 1.89), so it is not acceptable for interactive dictation on this host.
+- [`sherpa-onnx`](https://github.com/k2-fsa/sherpa-onnx) — selected streaming candidate. The 20M English Zipformer measured 0.11–0.15 RTF and 63–103 ms final flush locally. It passes latency but still needs Rust integration and broader WER testing.
 
 The backend choice is not permanent and should be decided from measurements rather than architecture lock-in.
 
@@ -109,9 +160,9 @@ Expose a small number of validated product profiles instead of every model varia
 
 | Profile | Initial candidate | Intent |
 |---|---|---|
-| **Fast** | Whisper tiny-class, quantized | Older / low-spec CPUs |
-| **Balanced** | Whisper base-class, quantized | Default interactive dictation |
-| **Accurate** | Whisper small-class | Faster CPUs or optional GPU |
+| **Live** | sherpa-onnx streaming Zipformer 20M, int8 | Immediate partials and low release latency |
+| **Fallback** | whisper.cpp tiny.en | Offline compatibility and accuracy comparison |
+| **Accurate** | To be selected from corpus measurements | Optional second pass or faster hardware |
 
 FUTO Voice Input is a useful feasibility reference: practical local Whisper-class dictation already runs on phone-class hardware. VoiceStand should therefore be able to provide good CPU-only dictation on ordinary x86-64 Linux machines without treating a GPU as mandatory.
 
@@ -198,19 +249,14 @@ The immediate redesign removes Intel-specific hardware assumptions from the requ
 
 ## Immediate Work Order
 
-1. Introduce `SpeechBackend`.
-2. Integrate real CPU ASR through `whisper.cpp`.
-3. Add a fixed WAV/corpus benchmark harness.
-4. Replace the placeholder CPU transcription path.
-5. Add explicit transcription session IDs/state machine.
-6. Implement real global PTT/toggle activation.
-7. Implement the first Linux text sink.
-8. Benchmark IBus/Fcitx5/Wayland/X11 integration.
-9. Optimize endpointing and release-to-final latency.
-10. Benchmark tiny/base/small and thread counts.
-11. Benchmark a streaming `sherpa-onnx` backend.
-12. Run soak, device-recovery, suspend/resume, and desktop-session recovery tests.
-13. Add optional GPU/NPU acceleration only after the CPU path passes production gates.
+1. Integrate sherpa-onnx's Rust online recognizer behind a streaming backend contract.
+2. Feed live 100 ms frames into one persistent recognition stream and publish accumulated partials.
+3. Make the streaming backend the default only after fixed-corpus accuracy and release-latency gates pass.
+4. Keep whisper.cpp as an explicit offline/fallback path; remove its full-utterance work from normal live dictation.
+5. Run the browser/editor/terminal X11 acceptance matrix.
+6. Add audio-device loss/recovery, suspend/resume, and live microphone soak tests.
+7. Implement native Wayland/input-method backend selection.
+8. Add optional GPU/NPU acceleration only after the CPU path passes production gates.
 
 ## Production Baseline
 
@@ -263,13 +309,14 @@ cargo clippy --workspace --all-targets --all-features
 
 Some legacy/experimental crates may remain disabled from the active workspace until their responsibilities are either removed or reintegrated behind the new interfaces.
 
-## Redesign Specification
+## Authoritative Documentation
 
 The complete architecture, migration phases, production gates, benchmark plan, session-state design, backend evaluation criteria, and implementation order are maintained here:
 
-**[CPU-First Production Redesign](docs/CPU_FIRST_PRODUCTION_REDESIGN.md)**
-
-That document is the authoritative design direction for the current redesign.
+- **[Current Architecture](docs/CURRENT_ARCHITECTURE.md)** — implemented data flow, backend decision, boundaries, and next migration.
+- **[Project Status](docs/PROJECT_STATUS.md)** — phase ledger and remaining production gates.
+- **[Benchmark Evidence](docs/BENCHMARKS.md)** — corpus, commands, measurements, and interpretation.
+- **[CPU-First Production Redesign](docs/CPU_FIRST_PRODUCTION_REDESIGN.md)** — broader design requirements.
 
 ## License
 

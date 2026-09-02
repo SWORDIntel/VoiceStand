@@ -1,20 +1,24 @@
+pub mod asr_runtime;
 pub mod config;
 pub mod error;
-pub mod types;
 pub mod events;
-pub mod performance;
 pub mod integration;
+pub mod performance;
+pub mod transcript_merge;
+pub mod transcript_stabilizer;
+pub mod types;
 
+pub use asr_runtime::*;
 pub use config::*;
-pub use error::{VoiceStandError, AudioError, Result};
-pub use types::*;
+pub use error::{AudioError, Result, VoiceStandError};
 pub use events::*;
-pub use performance::*;
 pub use integration::*;
+pub use performance::*;
+pub use types::*;
 
-use std::sync::Arc;
-use parking_lot::RwLock;
 use crossbeam_channel::{Receiver, Sender};
+use parking_lot::RwLock;
+use std::sync::Arc;
 
 /// Core application state with thread-safe access
 #[derive(Debug, Clone)]
@@ -43,11 +47,14 @@ impl AppState {
 
     pub fn set_recording(&self, recording: bool) {
         *self.is_recording.lock() = recording;
-        let _ = self.event_sender.send(AppEvent::RecordingStateChanged(recording));
+        let _ = self
+            .event_sender
+            .send(AppEvent::RecordingStateChanged(recording));
     }
 
     pub fn send_event(&self, event: AppEvent) -> Result<()> {
-        self.event_sender.send(event)
+        self.event_sender
+            .send(event)
             .map_err(|_| VoiceStandError::EventSendFailed)?;
         Ok(())
     }

@@ -6,6 +6,8 @@ use tokio::sync::mpsc;
 pub enum PttEvent {
     Pressed { timestamp: std::time::Instant },
     Released { timestamp: std::time::Instant },
+    ToggleOn { timestamp: std::time::Instant },
+    ToggleOff { timestamp: std::time::Instant },
     Error { error: String },
 }
 
@@ -16,7 +18,12 @@ pub struct PushToTalkManager {
 impl PushToTalkManager {
     pub fn new() -> (Self, mpsc::UnboundedReceiver<PttEvent>) {
         let (sender, receiver) = mpsc::unbounded_channel();
-        (Self { event_sender: sender }, receiver)
+        (
+            Self {
+                event_sender: sender,
+            },
+            receiver,
+        )
     }
 
     pub async fn initialize(&mut self) -> Result<()> {

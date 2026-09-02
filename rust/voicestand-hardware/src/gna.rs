@@ -3,9 +3,9 @@
 //! Memory-safe wrapper for Intel Gaussian Neural Accelerator with RAII resource management.
 //! Provides <100mW wake word detection with automatic cleanup.
 
+use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use parking_lot::RwLock;
 use tokio::sync::{mpsc, Semaphore};
 use tracing::{debug, info};
 
@@ -36,7 +36,7 @@ pub struct GNAConfig {
 impl Default for GNAConfig {
     fn default() -> Self {
         Self {
-            max_power_consumption_mw: 100,  // <100mW target
+            max_power_consumption_mw: 100, // <100mW target
             detection_threshold: 0.8,      // 80% confidence
             audio_buffer_size: 480,        // 30ms at 16kHz
             sample_rate: 16000,            // 16kHz
@@ -103,9 +103,7 @@ impl SendSafeSessionPtr {
 impl GNAHandle {
     /// Create new GNA handle
     fn new(device_id: u32) -> HardwareResult<Self> {
-        let device_ptr = unsafe {
-            gna_bindings::gna_device_create(device_id)
-        };
+        let device_ptr = unsafe { gna_bindings::gna_device_create(device_id) };
 
         if device_ptr.is_null() {
             return Err(HardwareError::init_failed(
@@ -126,9 +124,7 @@ impl GNAHandle {
             return false;
         }
 
-        unsafe {
-            gna_bindings::gna_device_is_operational(self.device_ptr)
-        }
+        unsafe { gna_bindings::gna_device_is_operational(self.device_ptr) }
     }
 
     /// Get device capabilities
@@ -138,9 +134,8 @@ impl GNAHandle {
         }
 
         let mut caps = gna_bindings::GNACapabilities::default();
-        let result = unsafe {
-            gna_bindings::gna_device_get_capabilities(self.device_ptr, &mut caps)
-        };
+        let result =
+            unsafe { gna_bindings::gna_device_get_capabilities(self.device_ptr, &mut caps) };
 
         if result != 0 {
             return Err(HardwareError::driver_error(
@@ -166,9 +161,7 @@ impl GNAHandle {
             return Err(HardwareError::DeviceUnhealthy("GNA".to_string()));
         }
 
-        let power_mw = unsafe {
-            gna_bindings::gna_device_get_power_consumption(self.device_ptr)
-        };
+        let power_mw = unsafe { gna_bindings::gna_device_get_power_consumption(self.device_ptr) };
 
         if power_mw < 0.0 {
             return Err(HardwareError::driver_error(
@@ -236,10 +229,7 @@ impl WakeWordModelCache {
 
         // Load new wake word model
         let model_ptr = unsafe {
-            gna_bindings::gna_wake_word_model_load(
-                wake_word.as_ptr() as *const i8,
-                wake_word.len(),
-            )
+            gna_bindings::gna_wake_word_model_load(wake_word.as_ptr() as *const i8, wake_word.len())
         };
 
         if model_ptr.is_null() {
@@ -250,9 +240,7 @@ impl WakeWordModelCache {
         }
 
         // Get model memory usage
-        let memory_usage_kb = unsafe {
-            gna_bindings::gna_model_get_memory_usage_kb(model_ptr)
-        };
+        let memory_usage_kb = unsafe { gna_bindings::gna_model_get_memory_usage_kb(model_ptr) };
 
         // Evict old models if necessary
         self.evict_if_needed()?;
@@ -273,7 +261,8 @@ impl WakeWordModelCache {
     fn evict_if_needed(&mut self) -> HardwareResult<()> {
         while self.models.len() >= self.max_models {
             // Find least recently used model
-            let lru_key = self.models
+            let lru_key = self
+                .models
                 .iter()
                 .min_by_key(|(_, model)| model.last_used)
                 .map(|(key, _)| key.clone());
@@ -293,7 +282,10 @@ impl WakeWordModelCache {
             unsafe {
                 gna_bindings::gna_model_destroy(model.model_ptr);
             }
-            debug!("Evicted wake word model from cache: {} ({} KB)", key, model.memory_usage_kb);
+            debug!(
+                "Evicted wake word model from cache: {} ({} KB)",
+                key, model.memory_usage_kb
+            );
         }
 
         Ok(())
@@ -478,14 +470,15 @@ impl WakeWordDetector {
     }
 
     /// Start continuous wake word detection
-    pub async fn start_continuous_detection(&mut self) -> HardwareResult<mpsc::Receiver<DetectionEvent>> {
-        let _permit = self.detection_semaphore
-            .acquire()
-            .await
-            .map_err(|_| HardwareError::concurrency_error(
+    pub async fn start_continuous_detection(
+        &mut self,
+    ) -> HardwareResult<mpsc::Receiver<DetectionEvent>> {
+        let _permit = self.detection_semaphore.acquire().await.map_err(|_| {
+            HardwareError::concurrency_error(
                 "detection_semaphore",
                 "Failed to acquire detection permit",
-            ))?;
+            )
+        })?;
 
         // Load wake word models
         let model_ptrs = self.load_wake_word_models().await?;
@@ -530,7 +523,8 @@ impl WakeWordDetector {
                 config,
                 performance_tracker,
                 tx,
-            ).await;
+            )
+            .await;
         });
 
         info!("🔊 Started continuous wake word detection");
@@ -538,7 +532,10 @@ impl WakeWordDetector {
     }
 
     /// Detect wake word in audio buffer (single shot)
-    pub async fn detect_wake_word(&mut self, audio_data: &[f32]) -> HardwareResult<Option<WakeWordDetection>> {
+    pub async fn detect_wake_word(
+        &mut self,
+        audio_data: &[f32],
+    ) -> HardwareResult<Option<WakeWordDetection>> {
         let start_time = Instant::now();
 
         // Validate audio data
@@ -585,9 +582,8 @@ impl WakeWordDetector {
             };
 
             // Get current power consumption
-            let power_mw = unsafe {
-                gna_bindings::gna_device_get_power_consumption(self.device_ptr)
-            };
+            let power_mw =
+                unsafe { gna_bindings::gna_device_get_power_consumption(self.device_ptr) };
 
             let detection_time_ms = detection_time.as_secs_f32() * 1000.0;
             let meets_power_target = power_mw <= self.config.max_power_consumption_mw as f32;
@@ -623,7 +619,10 @@ impl WakeWordDetector {
         if let Some(context) = self.detection_context.take() {
             // Detection context will be cleaned up in Drop
             let session_duration = context.start_time.elapsed();
-            info!("🛑 Stopped wake word detection after {:.1}s", session_duration.as_secs_f32());
+            info!(
+                "🛑 Stopped wake word detection after {:.1}s",
+                session_duration.as_secs_f32()
+            );
         }
 
         Ok(())
@@ -652,9 +651,8 @@ impl WakeWordDetector {
 
         loop {
             // Check if session is still valid
-            let session_active = unsafe {
-                gna_bindings::gna_detection_session_is_active(session_ptr_safe.as_ptr())
-            };
+            let session_active =
+                unsafe { gna_bindings::gna_detection_session_is_active(session_ptr_safe.as_ptr()) };
 
             if !session_active {
                 let _ = tx.send(DetectionEvent::SessionEnded).await;
@@ -728,8 +726,7 @@ fn validate_config_against_capabilities(
             "max_power_consumption_mw",
             format!(
                 "Requested {}mW exceeds GNA limit of {}mW",
-                config.max_power_consumption_mw,
-                capabilities.max_power_consumption_mw
+                config.max_power_consumption_mw, capabilities.max_power_consumption_mw
             ),
         ));
     }
@@ -750,13 +747,15 @@ fn validate_config_against_capabilities(
     }
 
     // Check sample rate support
-    if !capabilities.supported_sample_rates.contains(&config.sample_rate) {
+    if !capabilities
+        .supported_sample_rates
+        .contains(&config.sample_rate)
+    {
         return Err(HardwareError::config_error(
             "sample_rate",
             format!(
                 "Sample rate {}Hz not supported. Supported rates: {:?}",
-                config.sample_rate,
-                capabilities.supported_sample_rates
+                config.sample_rate, capabilities.supported_sample_rates
             ),
         ));
     }

@@ -11,6 +11,7 @@ tracing = { version = "0.1", features = ["log"] }
 parking_lot = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 global-hotkey = "0.5"
+crossbeam-channel = "0.5"
 
 [lib]
 name = "voicestand_state"

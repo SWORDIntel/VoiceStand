@@ -1,7 +1,9 @@
-use voicestand_types::{AudioConfig, SpeechConfig, GuiConfig, HotkeyConfig, Result, VoiceStandError};
+use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use directories::ProjectDirs;
+use voicestand_types::{
+    AudioConfig, GuiConfig, HotkeyConfig, Result, SpeechConfig, VoiceStandError,
+};
 
 /// Main application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,12 +30,29 @@ impl VoiceStandConfig {
     pub fn load() -> Result<Self> {
         let config_path = Self::config_file_path()?;
         if config_path.exists() {
-            Self::load_from_path(&config_path)
+            let mut config = Self::load_from_path(&config_path)?;
+            config.resolve_model_path()?;
+            Ok(config)
         } else {
-            let config = Self::default();
+            let mut config = Self::default();
+            config.resolve_model_path()?;
             config.save()?;
             Ok(config)
         }
+    }
+
+    fn resolve_model_path(&mut self) -> Result<()> {
+        let path = Path::new(&self.speech.model_path);
+        if path.is_relative() {
+            let file_name = path
+                .file_name()
+                .ok_or_else(|| VoiceStandError::config("Invalid model path"))?;
+            self.speech.model_path = Self::models_dir_path()?
+                .join(file_name)
+                .to_string_lossy()
+                .into_owned();
+        }
+        Ok(())
     }
 
     /// Load configuration from specific path
@@ -90,18 +109,24 @@ impl VoiceStandConfig {
     pub fn validate(&self) -> Result<()> {
         // Validate audio config
         if self.audio.sample_rate == 0 {
-            return Err(VoiceStandError::config("Sample rate must be greater than 0"));
+            return Err(VoiceStandError::config(
+                "Sample rate must be greater than 0",
+            ));
         }
         if self.audio.channels == 0 {
             return Err(VoiceStandError::config("Channels must be greater than 0"));
         }
         if self.audio.vad_threshold < 0.0 || self.audio.vad_threshold > 1.0 {
-            return Err(VoiceStandError::config("VAD threshold must be between 0.0 and 1.0"));
+            return Err(VoiceStandError::config(
+                "VAD threshold must be between 0.0 and 1.0",
+            ));
         }
 
         // Validate speech config
         if self.speech.num_threads == 0 {
-            return Err(VoiceStandError::config("Number of threads must be greater than 0"));
+            return Err(VoiceStandError::config(
+                "Number of threads must be greater than 0",
+            ));
         }
         if self.speech.max_tokens == 0 {
             return Err(VoiceStandError::config("Max tokens must be greater than 0"));
@@ -112,10 +137,14 @@ impl VoiceStandConfig {
 
         // Validate GUI config
         if self.gui.window_width <= 0 {
-            return Err(VoiceStandError::config("Window width must be greater than 0"));
+            return Err(VoiceStandError::config(
+                "Window width must be greater than 0",
+            ));
         }
         if self.gui.window_height <= 0 {
-            return Err(VoiceStandError::config("Window height must be greater than 0"));
+            return Err(VoiceStandError::config(
+                "Window height must be greater than 0",
+            ));
         }
 
         Ok(())

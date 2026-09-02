@@ -1,141 +1,59 @@
 # VoiceStand Project Status
 
-## Current Implementation Status
+**Architecture:** CPU-first local Linux dictation
 
-### ✅ Completed Features
+**Updated:** 2026-09-02
 
-#### Core Voice Processing
-- **Intel Hardware Integration**: NPU (11 TOPS) and GNA (0.1W) acceleration working
-- **Push-to-Talk System**: Dual activation via microphone key OR GNA voice command
-- **Real-time Audio Pipeline**: <3ms latency with comprehensive processing
-- **Memory-Safe Rust**: Zero unwrap() calls, full Result<T,E> error handling
-- **Voice Activity Detection**: Energy + ZCR + spectral analysis
-- **Audio Enhancement**: Noise reduction and speech optimization
+**Production status:** end-to-end X11/XWayland path implemented; desktop acceptance and robustness work remain
 
-#### Hardware Acceleration
-- **OpenVINO 2025.3.0**: NPU device access and inference acceleration
-- **Intel Meteor Lake**: P-core and E-core optimization
-- **GNA Integration**: Always-on wake word detection (<100mW)
-- **Performance**: 2.98ms inference latency (exceeds <5ms target)
+## Phase ledger
 
-#### Build System
-- **Rust Toolchain**: Complete development environment
-- **Cross-platform**: Linux compatibility with generic Intel Meteor Lake support
-- **CI/CD Ready**: Build scripts and dependency management
+| Phase | Status | Evidence / remaining gate |
+|---|---|---|
+| 0. Freeze accelerator assumptions | Complete | CPU is the required baseline; Intel hardware is optional/legacy. |
+| 1. Real CPU ASR | Complete | `whisper.cpp` backend, real model loading, WAV smoke test, cancellation, metrics. |
+| 2. Real PTT | Implemented, acceptance pending | X11/XWayland hold and toggle bindings drive capture; manual desktop validation remains. |
+| 3. Real text insertion | Implemented, acceptance pending | `TextSink` plus focused-window `xdotool` backend; browser/editor/terminal matrix remains. |
+| 4. Streaming UX | In progress, target failing | Percentile harness implemented. Current 11 s JFK/tiny.en baseline on this host: warm decode p50 20.8 s, RTF 1.89 with four threads. Exact partials finalize immediately; releases up to two seconds beyond a partial decode only a one-second-overlap tail and merge on verified word overlap. Ambiguous or larger gaps retain the full-decode fallback. |
+| 5. Backend benchmark | Streaming candidate passes latency | sherpa-onnx 1.13.7 with the 20M English Zipformer runs at 0.11–0.15 RTF on this host and final flush measured 63–103 ms. JFK with production-equivalent 300 ms pre-roll retained the full phrase structure but made two word errors; broader accuracy testing remains before promotion. |
+| 6. Robustness | In progress | Deterministic 500-session PTT/ASR soak and stale-decode cancellation pass; device/session recovery, suspend/resume, and fault injection remain. |
+| 7. Packaging / UX | In progress | Verified archive, user-local installer, desktop file, optional autostart, and model installer implemented; tray/setup UI remains. |
+| 8. Optional acceleration | Deferred | Begins only after CPU production gates pass. |
 
-### 🚧 Designed but Not Implemented
+## Current supported path
 
-#### Enterprise Security Architecture
-- **TPM 2.0 Integration**: Hardware crypto acceleration (>500MB/s AES-256-GCM)
-- **Intel ME Coordination**: Ring -3 security with 52+ cryptographic algorithms
-- **NSA Suite B**: Intelligence-grade cryptographic compliance
-- **Adaptive GUI**: Hardware-based conditional security features
-- **Zero-Trust Architecture**: Continuous attestation and verification
-
-#### Advanced Features
-- **Multi-language Support**: Translation and recognition
-- **Meeting Mode**: Multi-speaker transcription
-- **Learning System**: Adaptive accuracy improvement
-- **Enterprise Compliance**: FIPS 140-2, Common Criteria EAL4+
-
-## Technical Architecture
-
-### Audio Processing Pipeline
-```
-Audio Input → VAD → Enhancement → NPU Processing → Text Output
-     ↓           ↓         ↓            ↓           ↓
-  PulseAudio → Energy → Noise Red. → OpenVINO → GUI Display
-     ↓           ↓         ↓            ↓           ↓
-  16kHz F32 → Threshold → Spectral → Whisper → Real-time
+```text
+Ctrl+Alt+V hold or Ctrl+Alt+Space toggle
+  -> CPAL microphone capture (normalized to 16 kHz mono)
+  -> bounded utterance assembly with pre-roll
+  -> partial/final whisper.cpp CPU decoding (temporary live backend)
+  -> Ctrl+Alt+V release forces finalization
+  -> sanitized transcript typed into the focused X11/XWayland application
 ```
 
-### Security Architecture (Designed)
-```
-Application Layer → Security Interface → Hardware Layer
-      ↓                    ↓                ↓
-   GUI Controls →    TPM 2.0 API →     Intel ME
-      ↓                    ↓                ↓
- User Features →   Crypto Accel →    Ring -3 Ops
-      ↓                    ↓                ↓
-  Voice Data →     Encryption →     Hardware HSM
-```
+The compatibility text sink does not insert unstable partials. Final text is passed directly as a process argument without a shell, and newline/control characters are removed so dictation cannot implicitly submit a terminal command.
 
-## Performance Metrics
+Native Wayland, IBus, and Fcitx5 are not yet implemented. On a session without X11/XWayland, VoiceStand reports the activation/text backend as unavailable instead of silently falling back to a placeholder.
 
-| Component | Current Performance | Target | Status |
-|-----------|-------------------|--------|--------|
-| NPU Inference | 2.98ms | <5ms | ✅ Exceeded |
-| Audio Latency | <3ms | <10ms | ✅ Exceeded |
-| Memory Safety | 0 unwrap() | 0 unsafe | ✅ Complete |
-| Detection Accuracy | ~95% | >90% | ✅ Achieved |
-| Power Efficiency | <100mW GNA | <200mW | ✅ Efficient |
+## Local release gate
 
-## Repository Structure
+`./scripts/ci-local.sh` is the authoritative pre-push gate. It performs:
 
-```
-/home/john/VoiceStand/
-├── rust/                      # Rust implementation
-│   ├── voicestand-audio/      # Audio processing pipeline
-│   ├── voicestand-core/       # Core types and integration
-│   ├── voicestand-state/      # State management and activation
-│   └── voicestand-gui/        # GTK4 user interface
-├── src/                       # C++ implementation (legacy)
-│   ├── core/                  # Core audio processing
-│   └── gui/                   # GTK4 interface
-├── docs/                      # Documentation
-│   ├── ADAPTIVE_SECURITY_INTERFACE.md
-│   ├── SECURITY_INTEGRATION_GUIDE.md
-│   └── PROJECT_STATUS.md      # This file
-├── build.sh                   # Build automation
-├── CMakeLists.txt            # Build configuration
-└── README.md                 # Project overview
-```
+- shell validation and patch whitespace checks;
+- locked workspace check and all workspace tests;
+- strict ASR, activation, and text-output linting;
+- release build;
+- deterministic release archive assembly and checksum verification;
+- isolated user-local install, desktop entry, and autostart acceptance.
 
-## Development History
+The GitHub Actions job invokes this same script. A local green run does not claim that a hosted runner has executed successfully; it minimizes hosted iteration by testing the shared logic first.
 
-### Phase 1: Foundation (Complete)
-- Intel hardware detection and OpenVINO integration
-- Basic audio capture and processing pipeline
-- Push-to-talk activation system
+## Immediate next work
 
-### Phase 2: Optimization (Complete)
-- Memory safety fixes (65 unwrap() → 0)
-- Real-time pipeline integration
-- Performance optimization (<3ms latency)
+1. Run the manual X11 acceptance matrix in browser, editor, and terminal fields.
+2. Integrate the measured sherpa-onnx Zipformer candidate as the persistent streaming backend; retain whisper.cpp as explicit fallback.
+3. Add audio-device loss/recovery and suspend/resume fault tests.
+4. Implement native Wayland/input-method backend selection.
+5. Run a live microphone and desktop-output soak in addition to the deterministic 500-session test.
 
-### Phase 3: Security Planning (Complete)
-- Comprehensive security architecture design
-- TPM 2.0 + Intel ME integration planning
-- Enterprise compliance framework
-
-### Phase 4: Production Deployment (Ready)
-- System is production-ready for basic voice-to-text
-- Security features available for enterprise deployment
-- GUI provides functional interface
-
-## Next Steps (Optional)
-
-1. **Security Implementation**: Implement designed TPM/ME security features
-2. **Advanced Features**: Multi-language, meeting mode, learning system
-3. **Enterprise Features**: Compliance validation, audit logging
-4. **Mobile/Web**: Cross-platform expansion
-
-## Team Coordination
-
-This project was developed using multi-agent coordination:
-- **COORDINATOR**: Strategic planning and agent orchestration
-- **DIRECTOR**: System architecture and Intel hardware strategy
-- **PROJECTORCHESTRATOR**: Tactical execution planning
-- **RUST-INTERNAL**: Memory-safe Rust implementation
-- **NPU/GNA Agents**: Hardware acceleration integration
-- **DEBUGGER**: Critical issue identification and resolution
-- **HARDWARE-INTEL**: Intel-specific optimization
-- **RESEARCHER/ARCHITECT/NSA**: Security architecture design
-
-## Status Summary
-
-**Current State**: Production-ready voice-to-text system with Intel hardware acceleration
-**Security State**: Comprehensive architecture designed, implementation optional
-**Performance**: Exceeds all latency and accuracy targets
-**Code Quality**: Memory-safe, zero unsafe patterns
-**Documentation**: Complete technical and security documentation
+VoiceStand is production-ready only after the complete desktop path survives the acceptance matrix and robustness gates for hundreds of sessions without stuck capture state or manual recovery.

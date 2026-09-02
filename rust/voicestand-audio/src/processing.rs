@@ -1,5 +1,5 @@
-use voicestand_types::{Result, VoiceStandError};
 use dasp::{interpolate::linear::Linear, signal, Signal};
+use voicestand_types::{Result, VoiceStandError};
 
 /// Audio processing utilities for noise reduction and enhancement
 pub struct AudioProcessor {
@@ -35,9 +35,7 @@ impl AudioProcessor {
         }
 
         // Find peak amplitude
-        let peak = samples.iter()
-            .map(|&x| x.abs())
-            .fold(0.0f32, f32::max);
+        let peak = samples.iter().map(|&x| x.abs()).fold(0.0f32, f32::max);
 
         if peak > 0.0 && peak != 1.0 {
             let scale = 0.95 / peak; // Leave some headroom
@@ -127,7 +125,8 @@ impl AudioProcessor {
         }
 
         for (i, sample) in samples.iter_mut().enumerate() {
-            let window_val = 0.54 - 0.46 * (2.0 * std::f32::consts::PI * i as f32 / (n - 1) as f32).cos();
+            let window_val =
+                0.54 - 0.46 * (2.0 * std::f32::consts::PI * i as f32 / (n - 1) as f32).cos();
             *sample *= window_val;
         }
     }
@@ -271,14 +270,10 @@ mod tests {
         let processor = AudioProcessor::new(16000, 1024);
 
         // High-frequency signal (more zero crossings)
-        let high_freq: Vec<f32> = (0..1000)
-            .map(|i| (i as f32 * 0.5).sin())
-            .collect();
+        let high_freq: Vec<f32> = (0..1000).map(|i| (i as f32 * 0.5).sin()).collect();
 
         // Low-frequency signal (fewer zero crossings)
-        let low_freq: Vec<f32> = (0..1000)
-            .map(|i| (i as f32 * 0.1).sin())
-            .collect();
+        let low_freq: Vec<f32> = (0..1000).map(|i| (i as f32 * 0.1).sin()).collect();
 
         let high_centroid = processor.spectral_centroid(&high_freq);
         let low_centroid = processor.spectral_centroid(&low_freq);

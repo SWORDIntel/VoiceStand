@@ -1,11 +1,11 @@
 // Audio processing pipeline
-use crate::{AudioError, AudioFrame, AudioSample, VADConfig, VADResult};
 use crate::processing::{AudioProcessor, AudioStats};
 use crate::vad::VoiceActivityDetector;
+use crate::{AudioError, AudioFrame, AudioSample, VADConfig, VADResult};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use tracing::{debug, warn, error};
+use tracing::{debug, error, warn};
 
 #[derive(Debug, Clone)]
 pub struct PipelineConfig {
@@ -41,14 +41,20 @@ pub enum PipelineEvent {
         stats: AudioStats,
         vad_result: Option<VADResult>,
     },
-    VoiceDetected { confidence: f32 },
+    VoiceDetected {
+        confidence: f32,
+    },
     SilenceDetected,
-    LatencyWarning { actual_ms: f32 },
+    LatencyWarning {
+        actual_ms: f32,
+    },
     ProcessingComplete {
         duration_ms: f32,
         samples_processed: usize,
     },
-    Error { error: AudioError },
+    Error {
+        error: AudioError,
+    },
 }
 
 pub struct AudioPipeline {
@@ -61,14 +67,13 @@ pub struct AudioPipeline {
 }
 
 impl AudioPipeline {
-    pub fn new(config: PipelineConfig) -> Result<(Self, mpsc::UnboundedReceiver<PipelineEvent>), AudioError> {
+    pub fn new(
+        config: PipelineConfig,
+    ) -> Result<(Self, mpsc::UnboundedReceiver<PipelineEvent>), AudioError> {
         let (sender, receiver) = mpsc::unbounded_channel();
 
         // Create audio processor
-        let processor = AudioProcessor::new(
-            config.sample_rate,
-            config.frames_per_buffer as usize,
-        );
+        let processor = AudioProcessor::new(config.sample_rate, config.frames_per_buffer as usize);
 
         // Create VAD with configuration
         let vad_config = VADConfig {
@@ -80,17 +85,22 @@ impl AudioPipeline {
         };
         let vad = VoiceActivityDetector::new(vad_config);
 
-        debug!("Audio pipeline initialized - sample_rate: {}, channels: {}, frames_per_buffer: {}",
-               config.sample_rate, config.channels, config.frames_per_buffer);
+        debug!(
+            "Audio pipeline initialized - sample_rate: {}, channels: {}, frames_per_buffer: {}",
+            config.sample_rate, config.channels, config.frames_per_buffer
+        );
 
-        Ok((Self {
-            config,
-            processor,
-            vad,
-            event_sender: sender,
-            sequence_number: 0,
-            total_samples_processed: 0,
-        }, receiver))
+        Ok((
+            Self {
+                config,
+                processor,
+                vad,
+                event_sender: sender,
+                sequence_number: 0,
+                total_samples_processed: 0,
+            },
+            receiver,
+        ))
     }
 
     /// Process audio frame with full pipeline
@@ -105,8 +115,11 @@ impl AudioPipeline {
         self.sequence_number += 1;
         self.total_samples_processed += samples.len();
 
-        debug!("Processing audio frame: {} samples, sequence: {}",
-               samples.len(), self.sequence_number);
+        debug!(
+            "Processing audio frame: {} samples, sequence: {}",
+            samples.len(),
+            self.sequence_number
+        );
 
         // Step 1: Audio enhancement and noise reduction
         let stats = if self.config.enable_noise_reduction {
@@ -122,7 +135,7 @@ impl AudioPipeline {
                         error: AudioError::ProcessingError {
                             stage: "audio_enhancement".to_string(),
                             reason: e.to_string(),
-                        }
+                        },
                     });
                     // Continue with unprocessed audio
                     AudioStats {
@@ -151,10 +164,12 @@ impl AudioPipeline {
                 Ok(result) => {
                     // Send voice/silence events
                     if result.has_voice {
-                        debug!("Voice detected - confidence: {:.3}, energy: {:.6}",
-                               result.confidence, result.energy_level);
+                        debug!(
+                            "Voice detected - confidence: {:.3}, energy: {:.6}",
+                            result.confidence, result.energy_level
+                        );
                         let _ = self.event_sender.send(PipelineEvent::VoiceDetected {
-                            confidence: result.confidence
+                            confidence: result.confidence,
                         });
                     } else {
                         let _ = self.event_sender.send(PipelineEvent::SilenceDetected);
@@ -175,10 +190,12 @@ impl AudioPipeline {
         let processing_ms = processing_time.as_secs_f32() * 1000.0;
 
         if processing_ms > self.config.max_latency_ms {
-            warn!("Processing latency exceeded target: {:.2}ms > {:.2}ms",
-                  processing_ms, self.config.max_latency_ms);
+            warn!(
+                "Processing latency exceeded target: {:.2}ms > {:.2}ms",
+                processing_ms, self.config.max_latency_ms
+            );
             let _ = self.event_sender.send(PipelineEvent::LatencyWarning {
-                actual_ms: processing_ms
+                actual_ms: processing_ms,
             });
         }
 
@@ -194,25 +211,35 @@ impl AudioPipeline {
             samples_processed: samples.len(),
         });
 
-        debug!("Audio pipeline processing complete - {:.2}ms, {} samples",
-               processing_ms, samples.len());
+        debug!(
+            "Audio pipeline processing complete - {:.2}ms, {} samples",
+            processing_ms,
+            samples.len()
+        );
 
         Ok(samples)
     }
 
     /// Process audio frame and return processing statistics
-    pub fn process_with_stats(&mut self, audio_data: &[f32]) -> Result<(Vec<f32>, AudioStats, Option<VADResult>), AudioError> {
+    pub fn process_with_stats(
+        &mut self,
+        audio_data: &[f32],
+    ) -> Result<(Vec<f32>, AudioStats, Option<VADResult>), AudioError> {
         let start_time = Instant::now();
         let mut samples = audio_data.to_vec();
 
         if samples.is_empty() {
-            return Ok((samples, AudioStats {
-                original_energy: 0.0,
-                processed_energy: 0.0,
-                snr_improvement: 0.0,
-                spectral_centroid: 0.0,
-                clipping_detected: false,
-            }, None));
+            return Ok((
+                samples,
+                AudioStats {
+                    original_energy: 0.0,
+                    processed_energy: 0.0,
+                    snr_improvement: 0.0,
+                    spectral_centroid: 0.0,
+                    clipping_detected: false,
+                },
+                None,
+            ));
         }
 
         self.sequence_number += 1;
@@ -220,7 +247,8 @@ impl AudioPipeline {
 
         // Audio processing
         let stats = if self.config.enable_noise_reduction {
-            self.processor.process_for_recognition(&mut samples)
+            self.processor
+                .process_for_recognition(&mut samples)
                 .map_err(|e| AudioError::ProcessingError {
                     stage: "audio_enhancement".to_string(),
                     reason: e.to_string(),
@@ -237,11 +265,14 @@ impl AudioPipeline {
 
         // Voice Activity Detection
         let vad_result = if self.config.enable_vad {
-            Some(self.vad.process(&samples)
-                .map_err(|e| AudioError::ProcessingError {
-                    stage: "vad".to_string(),
-                    reason: e.to_string(),
-                })?)
+            Some(
+                self.vad
+                    .process(&samples)
+                    .map_err(|e| AudioError::ProcessingError {
+                        stage: "vad".to_string(),
+                        reason: e.to_string(),
+                    })?,
+            )
         } else {
             None
         };

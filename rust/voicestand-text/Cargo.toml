@@ -1,0 +1,11 @@
+[package]
+name = "voicestand-text"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1.0"
+
+[lib]
+name = "voicestand_text"
+path = "src/lib.rs"

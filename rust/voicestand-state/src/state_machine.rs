@@ -49,8 +49,12 @@ impl StateMachine {
     pub fn transition(&mut self, transition: StateTransition) -> Result<()> {
         let new_state = match (&self.current_state, transition) {
             (VoiceStandState::Idle, StateTransition::StartListening) => VoiceStandState::Listening,
-            (VoiceStandState::Listening, StateTransition::StartProcessing) => VoiceStandState::Processing,
-            (VoiceStandState::Processing, StateTransition::StartSpeaking) => VoiceStandState::Speaking,
+            (VoiceStandState::Listening, StateTransition::StartProcessing) => {
+                VoiceStandState::Processing
+            }
+            (VoiceStandState::Processing, StateTransition::StartSpeaking) => {
+                VoiceStandState::Speaking
+            }
             (_, StateTransition::ReturnToIdle) => VoiceStandState::Idle,
             (_, StateTransition::ErrorOccurred) => VoiceStandState::Error,
             _ => return Ok(()), // Invalid transition, ignore
@@ -67,5 +71,11 @@ impl StateMachine {
         self.current_state = VoiceStandState::Idle;
         self.state_entered = Instant::now();
         Ok(())
+    }
+}
+
+impl Default for StateMachine {
+    fn default() -> Self {
+        Self::new()
     }
 }

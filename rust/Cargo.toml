@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "voicestand-types",
+    "voicestand-asr",
+    "voicestand-text",
     "voicestand-core",
     # "voicestand-intel",  # Disabled - 153 compilation errors, needs major refactoring
     "voicestand-hardware",

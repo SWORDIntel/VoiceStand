@@ -3,20 +3,27 @@
 //! Memory-safe push-to-talk voice-to-text system with NPU/GNA acceleration.
 //! Integrates all subsystems for production-grade operation.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 use tokio::signal;
 use tracing::{error, info, warn, Level};
 use tracing_subscriber;
 
-use voicestand_core::{
-    VoiceStandConfig, VoiceStandIntegration, IntegrationEvent, Result, VoiceStandError
+use voicestand_asr::{
+    read_wav_16khz_mono, DecodeOptions, ModelSpec, SpeechBackend, WhisperCppBackend,
 };
+use voicestand_core::{
+    IntegrationEvent, Result, VoiceStandConfig, VoiceStandError, VoiceStandIntegration,
+};
+use voicestand_text::{TextSink, XdotoolTextSink};
 
 /// VoiceStand application
 struct VoiceStandApp {
     integration: VoiceStandIntegration,
     config: VoiceStandConfig,
+    text_sink: Option<Box<dyn TextSink>>,
 }
 
 impl VoiceStandApp {
@@ -27,6 +34,7 @@ impl VoiceStandApp {
         Ok(Self {
             integration,
             config,
+            text_sink: None,
         })
     }
 
@@ -45,6 +53,12 @@ impl VoiceStandApp {
                 return Err(e);
             }
         }
+
+        let sink = XdotoolTextSink::new().map_err(|error| {
+            VoiceStandError::system(format!("Text sink initialization failed: {error}"))
+        })?;
+        info!(backend = sink.name(), "Focused-application text sink ready");
+        self.text_sink = Some(Box::new(sink));
 
         // Start the integration system
         let mut events = match self.integration.start().await {
@@ -68,7 +82,10 @@ impl VoiceStandApp {
     }
 
     /// Main application event loop
-    async fn main_loop(&mut self, events: &mut tokio::sync::mpsc::Receiver<IntegrationEvent>) -> Result<()> {
+    async fn main_loop(
+        &mut self,
+        events: &mut tokio::sync::mpsc::Receiver<IntegrationEvent>,
+    ) -> Result<()> {
         info!("🎤 VoiceStand is ready for voice commands");
         info!("Press Ctrl+Alt+Space to activate, or say 'voicestand' for wake word activation");
 
@@ -108,7 +125,7 @@ impl VoiceStandApp {
     }
 
     /// Handle integration events
-    async fn handle_integration_event(&self, event: IntegrationEvent) -> Result<()> {
+    async fn handle_integration_event(&mut self, event: IntegrationEvent) -> Result<()> {
         match event {
             IntegrationEvent::ComponentInitialized { component } => {
                 info!("✅ Component initialized: {}", component);
@@ -120,16 +137,26 @@ impl VoiceStandApp {
 
             IntegrationEvent::PTTActivated { timestamp } => {
                 info!("🔴 Push-to-talk activated at {:?}", timestamp);
+                self.integration.begin_ptt()?;
+                if let Some(sink) = &mut self.text_sink {
+                    sink.begin()
+                        .map_err(|error| VoiceStandError::system(error.to_string()))?;
+                }
                 println!("🎤 Recording... (release key to stop)");
             }
 
             IntegrationEvent::PTTDeactivated { timestamp } => {
                 info!("⚪ Push-to-talk deactivated at {:?}", timestamp);
                 println!("⏹️ Recording stopped - processing...");
+                self.integration.end_ptt().await?;
             }
 
             IntegrationEvent::WakeWordDetected { word, confidence } => {
-                info!("🔊 Wake word detected: '{}' ({:.1}%)", word, confidence * 100.0);
+                info!(
+                    "🔊 Wake word detected: '{}' ({:.1}%)",
+                    word,
+                    confidence * 100.0
+                );
                 println!("🔊 Wake word '{}' detected! Listening...", word);
             }
 
@@ -139,28 +166,34 @@ impl VoiceStandApp {
                 }
             }
 
-            IntegrationEvent::TranscriptionStarted { source } => {
-                match source {
-                    voicestand_core::TranscriptionSource::NPU => {
-                        info!("🚀 NPU transcription started");
-                        println!("🚀 Using NPU acceleration...");
-                    }
-                    voicestand_core::TranscriptionSource::CPU => {
-                        info!("💻 CPU transcription started");
-                        println!("💻 Using CPU fallback...");
-                    }
-                    voicestand_core::TranscriptionSource::Hybrid => {
-                        info!("⚡ Hybrid transcription started");
-                        println!("⚡ Using hybrid processing...");
-                    }
+            IntegrationEvent::TranscriptionStarted { source } => match source {
+                voicestand_core::TranscriptionSource::NPU => {
+                    info!("🚀 NPU transcription started");
+                    println!("🚀 Using NPU acceleration...");
                 }
-            }
+                voicestand_core::TranscriptionSource::CPU => {
+                    info!("💻 CPU transcription started");
+                    println!("💻 Using CPU fallback...");
+                }
+                voicestand_core::TranscriptionSource::Hybrid => {
+                    info!("⚡ Hybrid transcription started");
+                    println!("⚡ Using hybrid processing...");
+                }
+            },
 
             IntegrationEvent::TranscriptionCompleted { result } => {
-                let performance_indicator = if result.meets_latency_target { "🟢" } else { "🟡" };
+                let performance_indicator = if result.meets_latency_target {
+                    "🟢"
+                } else {
+                    "🟡"
+                };
 
-                info!("✅ Transcription completed: \"{}\" ({:.1}% confidence, {}ms)",
-                      result.text, result.confidence * 100.0, result.duration_ms);
+                info!(
+                    "✅ Transcription completed: \"{}\" ({:.1}% confidence, {}ms)",
+                    result.text,
+                    result.confidence * 100.0,
+                    result.duration_ms
+                );
 
                 println!("\n{} Transcription Result:", performance_indicator);
                 println!("📝 Text: \"{}\"", result.text);
@@ -174,11 +207,32 @@ impl VoiceStandApp {
                     println!("⚠️ Performance target exceeded (>10ms)");
                 }
                 println!();
+                if let Some(sink) = &mut self.text_sink {
+                    sink.commit(&result.text)
+                        .map_err(|error| VoiceStandError::system(error.to_string()))?;
+                }
+            }
+
+            IntegrationEvent::PartialTranscription {
+                text,
+                stable_prefix_bytes,
+                confidence,
+            } => {
+                let (stable, changing) = text.split_at(stable_prefix_bytes.min(text.len()));
+                println!("… {}[{}] ({:.0}%)", stable, changing, confidence * 100.0);
+                if let Some(sink) = &mut self.text_sink {
+                    sink.partial(&text)
+                        .map_err(|error| VoiceStandError::system(error.to_string()))?;
+                }
             }
 
             IntegrationEvent::TranscriptionFailed { error } => {
                 error!("❌ Transcription failed: {}", error);
                 println!("❌ Transcription failed: {}", error);
+                if let Some(sink) = &mut self.text_sink {
+                    sink.cancel()
+                        .map_err(|error| VoiceStandError::system(error.to_string()))?;
+                }
             }
 
             IntegrationEvent::AudioCaptured { frame_size, .. } => {
@@ -186,6 +240,10 @@ impl VoiceStandApp {
                 if frame_size > 0 {
                     // Audio capture is working
                 }
+            }
+
+            IntegrationEvent::LiveAudioFrame { samples } => {
+                self.integration.process_audio_frame(&samples).await?;
             }
 
             IntegrationEvent::SystemError { error } => {
@@ -216,7 +274,14 @@ impl VoiceStandApp {
                 println!("Components Active: {}", status.components_active);
                 println!("Components Failed: {}", status.components_failed);
                 println!("Capabilities: {}", status.capabilities.join(", "));
-                println!("Health: {}", if self.integration.is_healthy() { "✅ HEALTHY" } else { "⚠️ ISSUES" });
+                println!(
+                    "Health: {}",
+                    if self.integration.is_healthy() {
+                        "✅ HEALTHY"
+                    } else {
+                        "⚠️ ISSUES"
+                    }
+                );
                 println!("===============================\n");
             }
             Err(e) => {
@@ -227,6 +292,16 @@ impl VoiceStandApp {
 
     /// Print periodic status updates
     async fn print_periodic_status(&self) {
+        if let Some(metrics) = self.integration.asr_metrics() {
+            info!(
+                started = metrics.started,
+                completed = metrics.completed,
+                cancelled = metrics.cancelled,
+                failed = metrics.failed,
+                average_latency_ms = metrics.average_latency_ms,
+                "ASR runtime metrics"
+            );
+        }
         // Print status in development builds
         #[cfg(debug_assertions)]
         self.print_system_status().await;
@@ -263,6 +338,45 @@ async fn main() -> Result<()> {
         .with_line_number(false)
         .init();
 
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if matches!(
+        arguments.first().map(String::as_str),
+        Some("--version" | "-V")
+    ) {
+        println!("voicestand {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if matches!(arguments.first().map(String::as_str), Some("--check")) {
+        let config = VoiceStandConfig::load()?;
+        config.validate()?;
+        let model = PathBuf::from(&config.speech.model_path);
+        if !model.is_file() {
+            return Err(VoiceStandError::config(format!(
+                "model is missing: {}; run scripts/install-model.sh",
+                model.display()
+            )));
+        }
+        let sink = XdotoolTextSink::new()
+            .map_err(|error| VoiceStandError::system(format!("Text sink check failed: {error}")))?;
+        println!(
+            "VoiceStand configuration, model, and {} text output are ready: {}",
+            sink.name(),
+            model.display()
+        );
+        return Ok(());
+    }
+    if matches!(arguments.first().map(String::as_str), Some("--smoke-test")) {
+        let wav = arguments
+            .get(1)
+            .map(PathBuf::from)
+            .ok_or_else(|| VoiceStandError::config("usage: voicestand --smoke-test WAV [MODEL]"))?;
+        let mut config = VoiceStandConfig::load()?;
+        if let Some(model) = arguments.get(2) {
+            config.speech.model_path = model.clone();
+        }
+        return run_smoke_test(&config, &wav);
+    }
+
     // Print welcome banner
     print_banner();
 
@@ -288,9 +402,44 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+fn run_smoke_test(config: &VoiceStandConfig, wav_path: &PathBuf) -> Result<()> {
+    config.validate()?;
+    let audio = read_wav_16khz_mono(wav_path)?;
+    // The smoke test is deliberately CPU-only so it validates the universally
+    // available production fallback independently of optional acceleration.
+    let mut backend = WhisperCppBackend::cpu();
+    let load_started = Instant::now();
+    backend.load(&ModelSpec::new("smoke-test", &config.speech.model_path))?;
+    let load_ms = load_started.elapsed().as_secs_f64() * 1_000.0;
+    let decode_started = Instant::now();
+    let transcript = backend.transcribe(
+        &audio,
+        &DecodeOptions {
+            language: match config.speech.language.as_str() {
+                "" | "auto" => None,
+                value => Some(value.to_string()),
+            },
+            thread_count: config.speech.num_threads.clamp(1, 4),
+            ..DecodeOptions::default()
+        },
+    )?;
+    let decode_seconds = decode_started.elapsed().as_secs_f64();
+    let audio_seconds = audio.len() as f64 / 16_000.0;
+    println!("{}", transcript.text);
+    eprintln!("model_load_ms={load_ms:.1}");
+    eprintln!("decode_ms={:.1}", decode_seconds * 1_000.0);
+    eprintln!(
+        "real_time_factor={:.3}",
+        decode_seconds / audio_seconds.max(f64::EPSILON)
+    );
+    eprintln!("confidence={:.3}", transcript.confidence.unwrap_or(0.0));
+    Ok(())
+}
+
 /// Print welcome banner
 fn print_banner() {
-    println!(r#"
+    println!(
+        r#"
 ╦  ╦┌─┐┬┌─┐┌─┐╔═╗┌┬┐┌─┐┌┐┌┌┬┐
 ╚╗╔╝│ ││ ├┤ └─┐╚═╗ │ ├─┤│││ ││
  ╚╝ └─┘┴└─┘└─┘╚═╝ ┴ ┴ ┴┘└┘─┴┘
@@ -302,7 +451,8 @@ Memory-Safe Rust Implementation
 🔊 GNA Wake Words: <100mW power
 🎤 Push-to-Talk: <10ms latency
 🛡️ Memory Safety: Zero unwrap() calls
-"#);
+"#
+    );
 }
 
 /// Signal handler for graceful shutdown

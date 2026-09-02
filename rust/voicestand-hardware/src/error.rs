@@ -145,11 +145,7 @@ impl HardwareError {
     }
 
     /// Create performance error
-    pub fn performance_target(
-        metric: impl Into<String>,
-        actual: f64,
-        target: f64,
-    ) -> Self {
+    pub fn performance_target(metric: impl Into<String>, actual: f64, target: f64) -> Self {
         Self::PerformanceTarget {
             metric: metric.into(),
             actual,
@@ -158,11 +154,7 @@ impl HardwareError {
     }
 
     /// Create driver error
-    pub fn driver_error(
-        driver: impl Into<String>,
-        code: i32,
-        message: impl Into<String>,
-    ) -> Self {
+    pub fn driver_error(driver: impl Into<String>, code: i32, message: impl Into<String>) -> Self {
         Self::DriverError {
             driver: driver.into(),
             code,
@@ -432,6 +424,9 @@ mod tests {
 
         assert_eq!(context.component, "NPU");
         assert_eq!(context.operation, "initialization");
-        assert_eq!(context.additional_info.get("device_id"), Some(&"0".to_string()));
+        assert_eq!(
+            context.additional_info.get("device_id"),
+            Some(&"0".to_string())
+        );
     }
 }
