@@ -30,7 +30,8 @@ impl StreamingAsrRuntime {
         // The upstream model clips initial phonemes without left context. Silence
         // is fed into the recognizer only; captured utterance audio is unchanged.
         let pre_roll = vec![0.0; PRE_ROLL_SAMPLES];
-        debug_assert!(session.accept_audio(&pre_roll).is_ok());
+        let pre_roll_result = session.accept_audio(&pre_roll);
+        debug_assert!(pre_roll_result.is_ok());
         *self.session.lock() = Some(session);
     }
 

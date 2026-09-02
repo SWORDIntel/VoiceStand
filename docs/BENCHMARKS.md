@@ -88,3 +88,11 @@ The first `voicestand-asr` Rust session run established an additional integratio
 The backend decision is no longer blocked on speed: Zipformer passes and whisper.cpp fails the live latency gate. The next benchmark must run through the Rust online backend and report first-partial p50/p95, final-flush p50/p95, release-to-commit p50/p95, WER, peak RSS, and a longer dictation corpus.
 
 Hosted CI is not used for iterative performance work. `scripts/ci-local.sh` is the authoritative pre-push correctness/build/package gate; performance results are gathered locally on an identified host and are not presented as portable hardware guarantees.
+
+Run the complete three-file corpus locally with:
+
+```bash
+./scripts/benchmark-streaming.sh /path/to/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17 5
+```
+
+The release-mode harness uses the production audio/PTT orchestration rather than calling the recognizer directly. Its first JFK run exposed that the one-second pre-roll had accidentally lived inside `debug_assert!` and was therefore removed from optimized builds; the harness now protects against repeating that class of debug/release mismatch. After the fix, five JFK runs produced identical complete phrase structure, first-partial p50/p95 648/932 ms, release-to-final p50/p95 227/761 ms, and compute RTF p50 0.72. The p95 release gate remains narrowly failing.

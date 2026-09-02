@@ -7,9 +7,9 @@ cd "${REPOSITORY_ROOT}"
 
 echo "[ci] validating shell scripts"
 if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck scripts/ci-local.sh scripts/install-model.sh
+    shellcheck scripts/ci-local.sh scripts/install-model.sh scripts/benchmark-streaming.sh
 else
-    bash -n scripts/ci-local.sh scripts/install-model.sh
+    bash -n scripts/ci-local.sh scripts/install-model.sh scripts/benchmark-streaming.sh
 fi
 
 echo "[ci] validating patch whitespace"

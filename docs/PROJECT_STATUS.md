@@ -14,8 +14,8 @@
 | 1. Real CPU ASR | Complete | `whisper.cpp` backend, real model loading, WAV smoke test, cancellation, metrics. |
 | 2. Real PTT | Implemented, acceptance pending | X11/XWayland hold and toggle bindings drive capture; manual desktop validation remains. |
 | 3. Real text insertion | Implemented, acceptance pending | `TextSink` plus focused-window `xdotool` backend; browser/editor/terminal matrix remains. |
-| 4. Streaming UX | In progress, target failing | Percentile harness implemented. Current 11 s JFK/tiny.en baseline on this host: warm decode p50 20.8 s, RTF 1.89 with four threads. Exact partials finalize immediately; releases up to two seconds beyond a partial decode only a one-second-overlap tail and merge on verified word overlap. Ambiguous or larger gaps retain the full-decode fallback. |
-| 5. Backend benchmark | Rust streaming backend and PTT core wiring implemented | sherpa-onnx 1.13.7 with the 20M English Zipformer now provides live partials and immediate release flush, with model auto-discovery and Whisper fallback. A post-integration debug run produced 22 updates, 0.46 RTF, and 356 ms final flush. Broader WER and release-mode percentiles remain. |
+| 4. Streaming UX | In progress, p95 release gate narrowly failing | Complete release-mode orchestration on JFK: first partial p50/p95 648/932 ms; release-to-final p50/p95 227/761 ms. Median passes, but p95 exceeds the 700 ms target by 61 ms. |
+| 5. Backend benchmark | Corpus harness implemented; broader accuracy pending | The release harness drives the real audio pipeline and PTT lifecycle, reports percentiles and WER, and caught/fixed a release-only missing-pre-roll bug. Fixed references cover all three current WAV fixtures. |
 | 6. Robustness | In progress | Deterministic 500-session PTT/ASR soak and stale-decode cancellation pass; device/session recovery, suspend/resume, and fault injection remain. |
 | 7. Packaging / UX | In progress | Verified archive, user-local installer, desktop file, optional autostart, and model installer implemented; tray/setup UI remains. |
 | 8. Optional acceleration | Deferred | Begins only after CPU production gates pass. |
@@ -26,7 +26,8 @@
 Ctrl+Alt+V hold or Ctrl+Alt+Space toggle
   -> CPAL microphone capture (normalized to 16 kHz mono)
   -> bounded utterance assembly with pre-roll
-  -> partial/final whisper.cpp CPU decoding (temporary live backend)
+  -> persistent sherpa-onnx Zipformer streaming with live partials
+  -> whisper.cpp CPU final decode when streaming is unavailable
   -> Ctrl+Alt+V release forces finalization
   -> sanitized transcript typed into the focused X11/XWayland application
 ```
@@ -51,7 +52,7 @@ The GitHub Actions job invokes this same script. A local green run does not clai
 ## Immediate next work
 
 1. Run the manual X11 acceptance matrix in browser, editor, and terminal fields.
-2. Exercise the persistent Zipformer backend through complete desktop PTT tests; retain whisper.cpp as explicit fallback.
+2. Reduce release-to-final p95 below 700 ms and expand the reference corpus beyond three fixtures.
 3. Add audio-device loss/recovery and suspend/resume fault tests.
 4. Implement native Wayland/input-method backend selection.
 5. Run a live microphone and desktop-output soak in addition to the deterministic 500-session test.

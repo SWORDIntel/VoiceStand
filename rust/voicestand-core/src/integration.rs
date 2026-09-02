@@ -263,6 +263,46 @@ impl VoiceStandIntegration {
         })
     }
 
+    /// Build the production audio/PTT orchestration without opening desktop devices.
+    ///
+    /// This is intended for repeatable corpus benchmarks and fault tests. Runtime
+    /// applications should use [`Self::initialize`] instead.
+    pub fn for_offline_benchmark(
+        config: VoiceStandConfig,
+        fallback: AsrRuntime,
+        streaming: StreamingAsrRuntime,
+    ) -> Result<(Self, mpsc::Receiver<IntegrationEvent>)> {
+        let mut integration = Self::new(config)?;
+        let pipeline_config = voicestand_audio::PipelineConfig {
+            sample_rate: integration.config.audio.sample_rate,
+            channels: integration.config.audio.channels,
+            frames_per_buffer: integration.config.audio.buffer_size as u32,
+            max_latency_ms: 10.0,
+            enable_vad: true,
+            enable_noise_reduction: false,
+            vad_threshold: integration.config.audio.vad_threshold,
+            noise_gate_threshold: 0.01,
+        };
+        let (pipeline, _pipeline_events) = voicestand_audio::AudioPipeline::new(pipeline_config)
+            .map_err(|error| VoiceStandError::audio(error.to_string()))?;
+        integration.audio_pipeline = Some(Arc::new(RwLock::new(pipeline)));
+        integration.utterance_assembler = Some(Arc::new(parking_lot::Mutex::new(
+            voicestand_audio::UtteranceAssembler::new(
+                integration.config.audio.sample_rate,
+                300,
+                30_000,
+            ),
+        )));
+        integration.asr_runtime = Some(fallback);
+        integration.streaming_asr_runtime = Some(streaming);
+        integration.initialized = true;
+        let events = integration
+            .event_rx
+            .take()
+            .ok_or_else(|| VoiceStandError::state("integration event receiver is unavailable"))?;
+        Ok((integration, events))
+    }
+
     /// Initialize all subsystems with comprehensive error handling
     pub async fn initialize(&mut self) -> Result<()> {
         info!("🚀 Initializing VoiceStand integration system");
