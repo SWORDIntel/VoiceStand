@@ -81,6 +81,8 @@ Input cadence: 100 ms frames
 
 JFK with 300 ms leading pre-roll produced the complete sentence structure but recognized “and so” as “and saw” and one “ask” as “asked.” This is sufficient to promote the engine into Rust integration, not sufficient to declare the model accuracy-qualified.
 
+The first `voicestand-asr` Rust session run established an additional integration constraint. Forwarding 100 ms chunks with only 300 ms pre-roll clipped the opening speech; one second of pre-roll preserved the complete JFK phrase structure. Debug runs vary with host load: after core integration, a two-thread run produced 22 progressive updates, 0.46 RTF, a 356 ms final flush, and its first partial after 1.1 seconds of fed audio. A four-thread comparison regressed to 0.93 RTF, so the 20M runtime is capped at two threads. Release-mode percentiles remain to be recorded.
+
 ## Interpretation and next experiment
 
 The backend decision is no longer blocked on speed: Zipformer passes and whisper.cpp fails the live latency gate. The next benchmark must run through the Rust online backend and report first-partial p50/p95, final-flush p50/p95, release-to-commit p50/p95, WER, peak RSS, and a longer dictation corpus.

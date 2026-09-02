@@ -259,6 +259,8 @@ impl AudioData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpeechConfig {
     pub model_path: String,
+    #[serde(default)]
+    pub streaming_model_path: Option<String>,
     pub language: String,
     pub num_threads: usize,
     pub use_gpu: bool,
@@ -270,6 +272,7 @@ impl Default for SpeechConfig {
     fn default() -> Self {
         Self {
             model_path: "models/ggml-tiny.en.bin".to_string(),
+            streaming_model_path: None,
             language: "auto".to_string(),
             num_threads: num_cpus::get().clamp(1, 4),
             use_gpu: false,

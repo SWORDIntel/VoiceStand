@@ -52,6 +52,18 @@ impl VoiceStandConfig {
                 .to_string_lossy()
                 .into_owned();
         }
+        if let Some(path) = self.speech.streaming_model_path.as_mut() {
+            let candidate = Path::new(path);
+            if candidate.is_relative() {
+                let directory_name = candidate
+                    .file_name()
+                    .ok_or_else(|| VoiceStandError::config("Invalid streaming model path"))?;
+                *path = Self::models_dir_path()?
+                    .join(directory_name)
+                    .to_string_lossy()
+                    .into_owned();
+            }
+        }
         Ok(())
     }
 

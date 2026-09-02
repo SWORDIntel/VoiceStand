@@ -11,4 +11,5 @@ rust-version.workspace = true
 voicestand-types = { path = "../voicestand-types" }
 hound.workspace = true
 whisper-rs = "0.16"
+sherpa-onnx = "1.13.7"
 serde_json.workspace = true

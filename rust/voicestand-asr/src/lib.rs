@@ -16,9 +16,11 @@ use voicestand_types::{Result, VoiceStandError};
 pub mod benchmark;
 mod wav;
 mod whisper_cpp;
+mod zipformer;
 
 pub use wav::read_wav_16khz_mono;
 pub use whisper_cpp::WhisperCppBackend;
+pub use zipformer::{SherpaOnlineSession, SherpaZipformerBackend, SherpaZipformerConfig};
 
 #[derive(Clone, Default)]
 pub struct CancellationToken(Arc<AtomicBool>);
@@ -122,6 +124,21 @@ pub struct Transcript {
 }
 
 impl Transcript {
+    pub fn partial_result(
+        text: impl Into<String>,
+        confidence: Option<f32>,
+        audio_duration: Duration,
+    ) -> Result<Self> {
+        let transcript = Self {
+            text: text.into(),
+            confidence,
+            audio_duration,
+            is_final: false,
+        };
+        transcript.validate()?;
+        Ok(transcript)
+    }
+
     pub fn final_result(
         text: impl Into<String>,
         confidence: Option<f32>,

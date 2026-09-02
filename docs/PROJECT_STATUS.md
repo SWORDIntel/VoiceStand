@@ -15,7 +15,7 @@
 | 2. Real PTT | Implemented, acceptance pending | X11/XWayland hold and toggle bindings drive capture; manual desktop validation remains. |
 | 3. Real text insertion | Implemented, acceptance pending | `TextSink` plus focused-window `xdotool` backend; browser/editor/terminal matrix remains. |
 | 4. Streaming UX | In progress, target failing | Percentile harness implemented. Current 11 s JFK/tiny.en baseline on this host: warm decode p50 20.8 s, RTF 1.89 with four threads. Exact partials finalize immediately; releases up to two seconds beyond a partial decode only a one-second-overlap tail and merge on verified word overlap. Ambiguous or larger gaps retain the full-decode fallback. |
-| 5. Backend benchmark | Streaming candidate passes latency | sherpa-onnx 1.13.7 with the 20M English Zipformer runs at 0.11–0.15 RTF on this host and final flush measured 63–103 ms. JFK with production-equivalent 300 ms pre-roll retained the full phrase structure but made two word errors; broader accuracy testing remains before promotion. |
+| 5. Backend benchmark | Rust streaming backend and PTT core wiring implemented | sherpa-onnx 1.13.7 with the 20M English Zipformer now provides live partials and immediate release flush, with model auto-discovery and Whisper fallback. A post-integration debug run produced 22 updates, 0.46 RTF, and 356 ms final flush. Broader WER and release-mode percentiles remain. |
 | 6. Robustness | In progress | Deterministic 500-session PTT/ASR soak and stale-decode cancellation pass; device/session recovery, suspend/resume, and fault injection remain. |
 | 7. Packaging / UX | In progress | Verified archive, user-local installer, desktop file, optional autostart, and model installer implemented; tray/setup UI remains. |
 | 8. Optional acceleration | Deferred | Begins only after CPU production gates pass. |
@@ -51,7 +51,7 @@ The GitHub Actions job invokes this same script. A local green run does not clai
 ## Immediate next work
 
 1. Run the manual X11 acceptance matrix in browser, editor, and terminal fields.
-2. Integrate the measured sherpa-onnx Zipformer candidate as the persistent streaming backend; retain whisper.cpp as explicit fallback.
+2. Exercise the persistent Zipformer backend through complete desktop PTT tests; retain whisper.cpp as explicit fallback.
 3. Add audio-device loss/recovery and suspend/resume fault tests.
 4. Implement native Wayland/input-method backend selection.
 5. Run a live microphone and desktop-output soak in addition to the deterministic 500-session test.

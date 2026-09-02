@@ -13,8 +13,8 @@ use crate::asr_runtime::AsrMetrics;
 use crate::config::VoiceStandConfig;
 use crate::transcript_merge::merge_word_overlap;
 use crate::transcript_stabilizer::TranscriptStabilizer;
-use crate::AsrRuntime;
-use voicestand_asr::Transcript;
+use crate::{AsrRuntime, StreamingAsrRuntime};
+use voicestand_asr::{SherpaZipformerConfig, Transcript};
 use voicestand_types::{Result, SystemState, SystemStatus, TranscriptionResult, VoiceStandError};
 
 /// Integration manager for coordinating all subsystems
@@ -26,6 +26,7 @@ pub struct VoiceStandIntegration {
     utterance_assembler: Option<Arc<parking_lot::Mutex<voicestand_audio::UtteranceAssembler>>>,
     state_coordinator: Option<Arc<RwLock<voicestand_state::VoiceStandCoordinator>>>,
     asr_runtime: Option<AsrRuntime>,
+    streaming_asr_runtime: Option<StreamingAsrRuntime>,
     transcript_stabilizer: Arc<parking_lot::Mutex<TranscriptStabilizer>>,
     latest_partial: Arc<parking_lot::Mutex<Option<CachedPartial>>>,
     ptt_generation: Arc<AtomicU64>,
@@ -248,6 +249,7 @@ impl VoiceStandIntegration {
             utterance_assembler: None,
             state_coordinator: None,
             asr_runtime: None,
+            streaming_asr_runtime: None,
             transcript_stabilizer: Arc::new(parking_lot::Mutex::new(
                 TranscriptStabilizer::default(),
             )),
@@ -375,6 +377,33 @@ impl VoiceStandIntegration {
         let runtime = AsrRuntime::from_config(&self.config.speech)?;
         info!("CPU ASR ready with {}", runtime.backend_name());
         self.asr_runtime = Some(runtime);
+
+        let configured_path = self.config.speech.streaming_model_path.as_deref();
+        let model_path = configured_path.map(std::path::PathBuf::from).unwrap_or(
+            VoiceStandConfig::models_dir_path()?
+                .join("sherpa-onnx-streaming-zipformer-en-20M-2023-02-17"),
+        );
+        if model_path.is_dir() {
+            let mut config = SherpaZipformerConfig::new(&model_path);
+            // This small model loses latency to scheduling overhead above two
+            // threads on the target CPU; Whisper keeps its independent setting.
+            config.thread_count = self.config.speech.num_threads.min(2);
+            match StreamingAsrRuntime::load(&config) {
+                Ok(streaming) => {
+                    info!(
+                        "Streaming Zipformer ASR ready from {}",
+                        model_path.display()
+                    );
+                    self.streaming_asr_runtime = Some(streaming);
+                }
+                Err(error) => warn!("Streaming ASR unavailable; using Whisper fallback: {error}"),
+            }
+        } else if configured_path.is_some() {
+            warn!(
+                "Configured streaming model directory does not exist: {}",
+                model_path.display()
+            );
+        }
         Ok(())
     }
 
@@ -899,6 +928,30 @@ impl VoiceStandIntegration {
             .process_with_stats(audio_data)
             .map_err(|error| VoiceStandError::audio(error.to_string()))?;
 
+        if self.ptt_active.load(Ordering::Acquire) {
+            if let Some(streaming) = &self.streaming_asr_runtime {
+                match streaming.accept_audio(processed.clone()).await {
+                    Ok(Some(transcript)) => {
+                        let confidence = transcript.confidence.unwrap_or(1.0);
+                        let update = self.transcript_stabilizer.lock().update(&transcript.text);
+                        if let Some(update) = update {
+                            self.send_event(IntegrationEvent::PartialTranscription {
+                                text: update.text,
+                                stable_prefix_bytes: update.stable_prefix_bytes,
+                                confidence,
+                            })
+                            .await?;
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        warn!("Streaming ASR failed; disabling this session: {error}");
+                        streaming.cancel();
+                    }
+                }
+            }
+        }
+
         self.send_event(IntegrationEvent::AudioCaptured {
             frame_size: processed.len(),
             timestamp: Instant::now(),
@@ -923,7 +976,7 @@ impl VoiceStandIntegration {
             (utterance, partial)
         };
 
-        if let Some(samples) = partial {
+        if let Some(samples) = partial.filter(|_| self.streaming_asr_runtime.is_none()) {
             let runtime = self
                 .asr_runtime
                 .as_ref()
@@ -977,6 +1030,9 @@ impl VoiceStandIntegration {
         self.ptt_generation.fetch_add(1, Ordering::AcqRel);
         self.latest_partial.lock().take();
         self.transcript_stabilizer.lock().reset();
+        if let Some(streaming) = &self.streaming_asr_runtime {
+            streaming.begin();
+        }
         self.utterance_assembler
             .as_ref()
             .ok_or_else(|| VoiceStandError::audio("Utterance assembler is not initialized"))?
@@ -998,6 +1054,31 @@ impl VoiceStandIntegration {
             .end();
         match samples {
             Some(samples) if !samples.is_empty() => {
+                if let Some(streaming) = &self.streaming_asr_runtime {
+                    let started = Instant::now();
+                    match streaming.finish().await {
+                        Ok(Some(transcript)) if !transcript.text.trim().is_empty() => {
+                            let duration = started.elapsed();
+                            let result = TranscriptionResult {
+                                text: transcript.text,
+                                confidence: transcript.confidence.unwrap_or(1.0),
+                                language: self.config.speech.language.clone(),
+                                duration_ms: duration.as_millis() as u32,
+                                meets_latency_target: duration.as_millis() <= 700,
+                            };
+                            self.transcript_stabilizer.lock().reset();
+                            self.send_event(IntegrationEvent::TranscriptionCompleted {
+                                result: result.clone(),
+                            })
+                            .await?;
+                            return Ok(Some(result));
+                        }
+                        Ok(_) => {}
+                        Err(error) => {
+                            warn!("Streaming finalization failed; using Whisper: {error}")
+                        }
+                    }
+                }
                 if let Some(result) = self.publish_cached_final(samples.len()).await? {
                     Ok(Some(result))
                 } else if let Some(result) = self.finalize_from_tail(&samples).await? {
@@ -1006,7 +1087,12 @@ impl VoiceStandIntegration {
                     self.process_voice_command(&samples).await
                 }
             }
-            _ => Ok(None),
+            _ => {
+                if let Some(streaming) = &self.streaming_asr_runtime {
+                    streaming.cancel();
+                }
+                Ok(None)
+            }
         }
     }
 

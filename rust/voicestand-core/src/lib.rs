@@ -4,6 +4,7 @@ pub mod error;
 pub mod events;
 pub mod integration;
 pub mod performance;
+pub mod streaming_asr_runtime;
 pub mod transcript_merge;
 pub mod transcript_stabilizer;
 pub mod types;
@@ -14,6 +15,7 @@ pub use error::{AudioError, Result, VoiceStandError};
 pub use events::*;
 pub use integration::*;
 pub use performance::*;
+pub use streaming_asr_runtime::*;
 pub use types::*;
 
 use crossbeam_channel::{Receiver, Sender};

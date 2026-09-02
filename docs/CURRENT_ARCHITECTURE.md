@@ -40,7 +40,7 @@ Sherpa-onnx 1.13.7 with the English 20M streaming Zipformer is the selected live
 - 1.6–1.7 seconds compute for approximately 11 seconds of JFK audio;
 - useful partial updates during incremental 100 ms input.
 
-The candidate passes the latency gate. It is not yet wired into the Rust application and has not passed a broad WER corpus. JFK with production-like 300 ms pre-roll retained the full phrase structure but produced two word-level errors. Promotion therefore requires both integration and accuracy evidence.
+The candidate passes the latency gate. A native Rust streaming session is implemented in `voicestand-asr`, including model validation, incremental input, endpoint accumulation, duplicate-partial suppression, and final padding. `voicestand-core` now selects it for push-to-talk when the model is available, sends each processed microphone frame, publishes partials, and flushes on release. The installed model is auto-discovered, while `speech.streaming_model_path` can select another directory. Whisper remains the fallback. Rust testing showed that this model needs one second of recognizer-only pre-roll to preserve tightly cropped opening speech; with that pre-roll, JFK retained the full phrase structure but produced “and saw” for “and so.” Broader accuracy evidence is still required.
 
 ## Target live path
 
@@ -83,8 +83,8 @@ X11 and XWayland are the implemented activation and text-insertion path. Native 
 
 ## Required next gates
 
-1. Integrate the sherpa-onnx Rust online recognizer.
-2. Pass fixed-corpus latency and accuracy gates through the Rust backend.
+1. Add deterministic complete-orchestration latency tests around the wired sherpa-onnx PTT path.
+2. Pass fixed-corpus latency and accuracy gates through the complete Rust orchestration path.
 3. Pass browser, editor, and terminal insertion acceptance.
 4. Pass device disconnect/reconnect and suspend/resume recovery.
 5. Complete a live microphone/output soak in addition to deterministic tests.
